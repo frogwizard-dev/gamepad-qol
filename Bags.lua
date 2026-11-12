@@ -2,12 +2,12 @@
 --  * Blizzard puts the backpack and bag buttons inside the item grid (the backpack ends up in the
 --    far top-left). We lay the items out again without them and put the buttons in their own row
 --    above the items, or in a column down the left side.
---  * "Clean Up Bags" at the top of an item's Y (More Actions) menu, so tidying up doesn't need a trip
---    to the backpack button.
 --
--- Taint: everything here runs after Blizzard's own code (hooksecurefunc, Menu.ModifyMenu) and only
--- moves or resizes frames. It never writes into Blizzard's tables or the gamepad binding stack, so
--- using items from the bags in combat stays allowed.
+-- Taint: everything here runs after Blizzard's own code (hooksecurefunc) and only moves or resizes
+-- frames. It never writes into Blizzard's tables, menus or the gamepad binding stack.
+-- Don't add entries to gamepad menus (Menu.ModifyMenu): an addon-made entry taints the menu's
+-- close, which runs through the gamepad binding stack, and the action bars' protected
+-- SetPreferredGamepadInteractTarget is then forbidden (seen in 0.1.0 testing).
 local ADDON, ns = ...
 
 local SPACING = 5   -- Blizzard's ITEM_SPACING_X / ITEM_SPACING_Y (locals in ContainerFrame.lua)
@@ -68,13 +68,19 @@ local function CollectItems(frame)
 	return items
 end
 
--- Backpack first, then bags 1-4 and the reagent bag, skipping any the game hides.
+-- Backpack first, then bags 1-4, the reagent bag and the keyring, skipping any the game hides.
 local function CollectBagButtons()
 	local buttons = {}
+	local keyRing = GamepadBagBar.KeyRingButton
 	for _, button in ipairs(GamepadBagBar.BagButtonArray or {}) do
-		if button:IsShown() then
+		if button ~= keyRing and button:IsShown() then
 			buttons[#buttons + 1] = button
 		end
+	end
+	-- The keyring is in the same list but Blizzard only uses it while "show keyring" is on
+	-- (GamepadBagBarMixin:GetBagButton). It goes last, on the far end from the backpack.
+	if keyRing and keyRing:IsShown() and GetCVarBool("showKeyring") then
+		buttons[#buttons + 1] = keyRing
 	end
 	return buttons
 end
@@ -119,9 +125,14 @@ local function ApplySize(frame)
 	end
 end
 
-local function GetSideBackground()
+local function GetSideBackground(frame)
 	if not sideBackground then
-		sideBackground = GamepadBagBar:CreateTexture(nil, "BACKGROUND")
+		-- On a frame of ours (not drawn on Blizzard's bag bar), level with the bag bar so its
+		-- buttons draw over it.
+		local holder = CreateFrame("Frame", nil, frame)
+		holder:SetAllPoints(frame)
+		holder:SetFrameLevel(GamepadBagBar:GetFrameLevel())
+		sideBackground = holder:CreateTexture(nil, "BACKGROUND")
 		sideBackground:SetColorTexture(0.05, 0.05, 0.05, 0.85)
 	end
 	return sideBackground
@@ -146,75 +157,63 @@ local function LayOut(frame)
 	if #buttons == 0 then
 		return
 	end
-	local keyRing = GamepadBagBar.KeyRingButton
-	local last = buttons[#buttons]
 
 	if mode == "row" then
-		-- Right to left above the top row of items, the backpack on the right like the action bar's bags.
+		-- Left to right above the top row of items, starting at the grid's left edge: the backpack
+		-- first, as in Blizzard's own bag order.
+		--
+		-- Each button sits straight above an item of its column, anchored to it. The gamepad's grid
+		-- navigation puts buttons in one column only when their centres' x are exactly equal; a
+		-- button placed by adding up widths lands a fraction off and becomes a column of its own,
+		-- which made left / right zig-zag between the bag row and the items.
 		local columns = frame:GetColumns()
-		local first = buttons[1]
-		first:ClearAllPoints()
-		if #items > 0 then
-			local rows = math.ceil(#items / columns)
-			local topRight = items[(rows - 1) * columns + 1]
-			first:SetPoint("BOTTOMRIGHT", topRight, "TOPRIGHT", 0, ROW_GAP)
-		else
-			first:SetPoint("BOTTOMRIGHT", frame.MoneyFrame, "TOPRIGHT", 0, 4)
+		local info = C_XMLUtil.GetTemplateInfo(frame.itemButtonPool:GetTemplate())
+		local stepX, stepY = info.width + SPACING, info.height + SPACING
+		local rows = math.max(1, math.ceil(#items / columns))
+
+		-- Items fill from the bottom right, leftward then up: item k is in row floor((k-1)/columns)
+		-- from the bottom and column columns - (k-1) % columns from the left. Keep each column's
+		-- lowest item.
+		local lowest = {}  -- [column from the left] = { item, row }
+		for k, item in ipairs(items) do
+			local row = math.floor((k - 1) / columns)
+			local column = columns - (k - 1) % columns
+			if not lowest[column] then
+				lowest[column] = { item = item, row = row }
+			end
 		end
-		for i = 2, #buttons do
-			buttons[i]:ClearAllPoints()
-			buttons[i]:SetPoint("BOTTOMRIGHT", buttons[i - 1], "BOTTOMLEFT", -SPACING, 0)
-		end
-		if keyRing then
-			keyRing:ClearAllPoints()
-			keyRing:SetPoint("BOTTOMRIGHT", last, "BOTTOMLEFT", -SPACING, 0)
+
+		for i, button in ipairs(buttons) do
+			button:ClearAllPoints()
+			local below = lowest[i]
+			if below then
+				button:SetPoint("BOTTOM", below.item, "TOP", 0, (rows - 1 - below.row) * stepY + ROW_GAP)
+			elseif #items > 0 then
+				-- No item in this column (fewer items than columns): measure from the first item,
+				-- the bottom-right one.
+				button:SetPoint("BOTTOM", items[1], "TOP", -(columns - i) * stepX, (rows - 1) * stepY + ROW_GAP)
+			else
+				button:SetPoint("BOTTOMLEFT", frame.MoneyFrame, "TOPRIGHT",
+					-(columns * info.width + (columns - 1) * SPACING) + (i - 1) * stepX, 4)
+			end
 		end
 	else -- "side"
-		-- Top to bottom just outside the window's left edge, on a dark strip.
-		local first = buttons[1]
-		first:ClearAllPoints()
-		first:SetPoint("TOPRIGHT", frame, "TOPLEFT", -8, -40)
-		for i = 2, #buttons do
-			buttons[i]:ClearAllPoints()
-			buttons[i]:SetPoint("TOP", buttons[i - 1], "BOTTOM", 0, -SPACING)
-		end
-		local bottom = last
-		if keyRing and keyRing:IsShown() then
-			keyRing:ClearAllPoints()
-			keyRing:SetPoint("TOP", last, "BOTTOM", 0, -SPACING)
-			bottom = keyRing
+		-- Top to bottom just outside the window's left edge, on a dark strip. Every button is placed
+		-- from the same point of the window with the same x, so their centres line up exactly: the
+		-- gamepad's grid navigation needs that to see them as one column (as in the row above).
+		local info = C_XMLUtil.GetTemplateInfo(frame.itemButtonPool:GetTemplate())
+		local stepY = info.height + SPACING
+		local x = -8 - info.width / 2
+		for i, button in ipairs(buttons) do
+			button:ClearAllPoints()
+			button:SetPoint("TOP", frame, "TOPLEFT", x, -40 - (i - 1) * stepY)
 		end
 
-		local bg = GetSideBackground()
+		local bg = GetSideBackground(frame)
 		bg:ClearAllPoints()
-		bg:SetPoint("TOPLEFT", first, "TOPLEFT", -5, 5)
-		bg:SetPoint("RIGHT", first, "RIGHT", 5, 0)
-		bg:SetPoint("BOTTOM", bottom, "BOTTOM", 0, -5)
+		bg:SetPoint("TOPRIGHT", frame, "TOPLEFT", -3, -35)
+		bg:SetSize(info.width + 10, #buttons * stepY - SPACING + 10)
 		bg:Show()
-	end
-end
-
--- "Clean Up Bags" at the top of the Y menu on items in the gamepad bag window.
-local function AddCleanUpToItemMenu(owner, rootDescription)
-	if not (ns.db and ns.db.cleanUpInMenu) then
-		return
-	end
-	local bags = ContainerFrameCombinedBags
-	if not (owner and bags and bags:IsShown() and owner.GetBagID and owner:GetParent() == bags) then
-		return
-	end
-
-	local button = MenuUtil.CreateButton(BAG_CLEANUP_BAGS or "Clean Up Bags", function()
-		C_Container.SortBags()
-	end)
-	local ok = pcall(rootDescription.Insert, rootDescription, button, 1)
-	if ok then
-		rootDescription:Insert(MenuUtil.CreateDivider(), 2)
-	else
-		rootDescription:CreateDivider()
-		rootDescription:CreateButton(BAG_CLEANUP_BAGS or "Clean Up Bags", function()
-			C_Container.SortBags()
-		end)
 	end
 end
 
@@ -223,9 +222,5 @@ ns.OnLogin(function()
 	if bags and GamepadBagBar then
 		hooksecurefunc(bags, "UpdateFrameSize", ApplySize)
 		hooksecurefunc(bags, "UpdateItemLayout", LayOut)
-	end
-
-	if Menu and Menu.ModifyMenu then
-		Menu.ModifyMenu("MORE_CONTEXT_ACTIONS", AddCleanUpToItemMenu)
 	end
 end)

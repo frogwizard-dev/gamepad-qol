@@ -172,9 +172,6 @@ ns.OnLogin(function()
 		QueueUpdate()
 	end)
 
-	for _, frame in ipairs(ContainerFrames()) do
-		frame:HookScript("OnShow", QueueUpdate)
-	end
 	if ContainerFrame_GenerateFrame then
 		hooksecurefunc("ContainerFrame_GenerateFrame", QueueUpdate)
 	end
