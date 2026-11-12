@@ -2,7 +2,7 @@
 ## Title: Gamepad QoL
 ## Category: Frog Wizard
 ## Notes: Small fixes for Blizzard's gamepad UI: tidier bags, Clean Up on a button, cheapest items marked, quick invite and a peek map.
-## Version: 0.1.0
+## Version: 0.2.0
 ## SavedVariables: GamepadQoLDB
 ## IconTexture: Interface\Icons\INV_Misc_Bag_08
 ## X-Curse-Project-ID: 1800157
