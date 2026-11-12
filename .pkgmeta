@@ -1,0 +1,9 @@
+package-as: GamepadQoL
+
+manual-changelog:
+  filename: RELEASE_NOTES.md
+  markup-type: markdown
+
+ignore:
+  - Images
+  - RELEASE_NOTES.md
