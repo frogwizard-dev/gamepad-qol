@@ -1,6 +1,6 @@
 -- The button guide: a window listing our controller buttons, shown on first login and whenever an
 -- update changes them. Each row lights up when its button is pressed, so players can try them out
--- before closing it. Reopened from the settings or with /gqol guide.
+-- before closing it. Reopened from the settings window or with /gqol guide. Y opens the settings.
 --
 -- Taint: our own frame, never handed to Blizzard's window systems (no UIPanel, no UISpecialFrames,
 -- no gamepad frame manager). B closes it through a priority override binding of ours, held only
@@ -40,7 +40,7 @@ local function HowTo(row)
 	return text:sub(1, 1):upper() .. text:sub(2)
 end
 
-local frame, closeOwner, closeButton
+local frame, closeOwner, closeButton, settingsButton
 local rowFrames = {}
 
 local function UIFocused()
@@ -57,6 +57,7 @@ local function UpdateCloseBinding()
 	end
 	if want then
 		SetOverrideBindingClick(closeOwner, true, "PAD2", closeButton:GetName(), "LeftButton")
+		SetOverrideBindingClick(closeOwner, true, "PAD4", settingsButton:GetName(), "LeftButton")
 	else
 		ClearOverrideBindings(closeOwner)
 	end
@@ -67,7 +68,7 @@ local function Refresh()
 	for _, row in ipairs(ROWS) do
 		local r = rowFrames[row.id]
 		local how = HowTo(row)
-		r.how:SetText(how or "Not set: pick a button in Options > AddOns > Gamepad QoL.")
+		r.how:SetText(how or "Not set: press Y to pick a button in the settings.")
 		r.how:SetTextColor(how and 1 or 0.6, how and 1 or 0.6, how and 1 or 0.6)
 		r.tick:SetShown(r.tried == true)
 		r.status:SetText(r.tried and "Works!" or "")
@@ -130,11 +131,11 @@ local function Build()
 	local foot = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	foot:SetPoint("BOTTOM", 0, 34)
 	foot:SetWidth(480)
-	foot:SetText("Combinations work outside combat. Change any button in Options > AddOns > Gamepad QoL (/gqol).")
+	foot:SetText("Combinations work outside combat. Press Y to change any button in the settings (/gqol).")
 
 	local hint = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	hint:SetPoint("BOTTOM", 0, 14)
-	hint:SetText("Press B (Circle) or click Close when you're done.")
+	hint:SetText("Y (Triangle): settings  ·  B (Circle) or Close: done")
 
 	local close = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
 	close:SetSize(80, 22)
@@ -147,6 +148,21 @@ local function Build()
 	closeButton:Hide()
 	closeButton:RegisterForClicks("AnyDown")
 	closeButton:SetScript("OnClick", function() frame:Hide() end)
+
+	local function OpenSettings()
+		frame:Hide()
+		C_Timer.After(0, function() ns.ShowOptions() end)
+	end
+	settingsButton = CreateFrame("Button", "GamepadQoLGuideSettings", UIParent)
+	settingsButton:Hide()
+	settingsButton:RegisterForClicks("AnyDown")
+	settingsButton:SetScript("OnClick", OpenSettings)
+
+	local settings = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+	settings:SetSize(90, 22)
+	settings:SetPoint("BOTTOMLEFT", 12, 10)
+	settings:SetText("Settings")
+	settings:SetScript("OnClick", OpenSettings)
 
 	local elapsed = 0
 	frame:SetScript("OnUpdate", function(_, dt)

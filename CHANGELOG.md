@@ -1,5 +1,13 @@
 # Gamepad QoL
 
+## 0.3.0
+
+- Junk to sell or destroy: when your bags fill up, what should go first? The cheapest junk gets the game's junk coin and a number, 1 for the first to go, by what a vendor pays for the whole stack. The bag window's bottom bar says how many and what they're worth ("5 to sell or destroy · 23c"), and the item's tooltip its place.
+- Pick what counts (greys only, greys and whites, or greens too), how many to mark (1 to 5), whether to show the marks always or only when your bags are nearly full, and the look: Faded (the item dimmed and greyed; the default), Sell tag, Gold glow, Red wash or Coin only.
+- Never marked: food, drink, potions and other consumables; cloth, ore, herbs and other trade goods; reagents, recipes, quest items, ammunition and keys; profession and class tools (mining picks, skinning knives, blacksmith hammers, enchanting rods, fishing poles, thieves' tools, totems) and your hearthstone; items a quest in your log still needs.
+- Settings have their own window, made for the controller: D-pad up and down pick a setting, left and right (or A) change it, B closes; the mouse works too. Open it with /gqol, with Y in the button guide, or from Options > AddOns > Gamepad QoL. The mark style shows a preview. (Blizzard's own Settings window upset the gamepad UI when it closed with an addon's settings in it.)
+- The Key Bindings entries are gone, for the same reason: Clean Up, quick invite and the peek map are on controller buttons.
+
 ## 0.2.0
 
 - Clean Up Bags: press L3 while your bags are open (it's shown in the button bar under your bags). There's also a key binding, and a setting to clean up every time you close your bags (off to start with). It's no longer on the Y menu: an addon's entry there upset the game's gamepad menus and caused an error.

@@ -1,9 +1,0 @@
-<Bindings>
-	<Binding name="GAMEPADQOL_CLEANUP" header="GAMEPADQOL" category="ADDONS">
-		GamepadQoL_CleanUpBags()
-	</Binding>
-	<Binding name="GAMEPADQOL_INVITE" category="ADDONS">
-		GamepadQoL_QuickInvite()
-	</Binding>
-	<Binding name="CLICK GamepadQoLPeekMapButton:LeftButton" category="ADDONS"/>
-</Bindings>

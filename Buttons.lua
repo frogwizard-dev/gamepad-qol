@@ -67,18 +67,18 @@ function Buttons.Label(spec)
 end
 
 -- The choices for a settings dropdown.
-function Buttons.Options()
-	local container = Settings.CreateControlTextContainer()
-	container:Add("none", "Not set")
+-- The choices for a button setting, as { value, label } pairs (Options.lua).
+function Buttons.Choices()
+	local choices = { { "none", "Not set" } }
 	for _, held in ipairs(HOLDS) do
 		for _, stick in ipairs(STICKS) do
 			local spec = held .. "+" .. stick
-			container:Add(spec, Buttons.Label(spec))
+			choices[#choices + 1] = { spec, Buttons.Label(spec) }
 		end
 	end
-	container:Add("PADLSTICK", "L3 alone (replaces auto-run)")
-	container:Add("PADRSTICK", "R3 alone (replaces ping)")
-	return container:GetData()
+	choices[#choices + 1] = { "PADLSTICK", "L3 alone (replaces auto-run)" }
+	choices[#choices + 1] = { "PADRSTICK", "R3 alone (replaces ping)" }
+	return choices
 end
 
 -- A shoulder or trigger held, or a modifier: the press belongs to another binding. (An override

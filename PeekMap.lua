@@ -14,7 +14,6 @@ local ADDON, ns = ...
 
 local MACRO = "/click QuestLogMicroButton"
 
-_G["BINDING_NAME_CLICK GamepadQoLPeekMapButton:LeftButton"] = "Peek at the map (hold)"
 
 local button = CreateFrame("Button", "GamepadQoLPeekMapButton", UIParent,
 	"SecureActionButtonTemplate, SecureHandlerBaseTemplate")

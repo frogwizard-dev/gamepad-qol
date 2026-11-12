@@ -5,8 +5,11 @@ ns.DEFAULTS = {
 	bagButtons = "row",        -- "row" (above the items), "side" (down the left side) or "off" (Blizzard's grid)
 	autoCleanUp = false,       -- Clean Up Bags whenever the bags close
 	cleanUpHint = true,        -- "L3  Clean Up Bags" in the bag window's bottom bar
-	highlightCheapest = true,  -- mark the item(s) that sell for the least
-	cheapestCount = 1,         -- how many of the cheapest stacks to mark, numbered 1 (cheapest) upwards
+	highlightCheapest = true,  -- mark junk to sell or destroy (Cheapest.lua)
+	cheapestCount = 5,         -- how many to mark, 1 (the first to go) upwards
+	junkQualities = 1,         -- the best quality that counts: 0 greys, 1 whites too, 2 greens too
+	junkWhen = "always",       -- "always", or "nearly" (only while the bags are nearly full)
+	junkStyle = "faded",       -- the look (ns.JUNK_STYLES in Cheapest.lua)
 	-- Controller buttons (Buttons.lua): a stick click, alone or "HELD+STICK"; "none" for not set.
 	cleanUpButton = "PADLSTICK",                -- L3, only while the bags are open
 	inviteButton = "PADRTRIGGER+PADRSTICK",     -- RT held + R3
@@ -64,88 +67,68 @@ local function InitDB()
 	ns.db = db
 end
 
-local function RegisterSettings()
-	if not (Settings and Settings.RegisterVerticalLayoutCategory) then
+-- A page in Blizzard's AddOns list saying where the settings are, with a button to open them. The
+-- settings themselves are in our own window (Options.lua): Blizzard's Settings window calls an
+-- addon's code and reads its values while it works, and closing it then upsets Forever's gamepad UI.
+-- The page is a plain frame of ours; its button only notes the request, and our window opens once
+-- Blizzard's has closed (opening ours while that one has the controller would fight over it).
+local pendingOpen = false
+
+local function RegisterPage()
+	if not (Settings and Settings.RegisterCanvasLayoutCategory) then
 		return
 	end
+	local page = CreateFrame("Frame")
+	page.name = "Gamepad QoL"
 
-	local category = Settings.RegisterVerticalLayoutCategory("Gamepad QoL")
-	ns.settingsCategory = category
+	local title = page:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	title:SetPoint("TOPLEFT", 16, -16)
+	title:SetText("Gamepad QoL")
 
-	local function Register(key, name)
-		local default = ns.DEFAULTS[key]
-		local setting = Settings.RegisterAddOnSetting(category, "GamepadQoL_" .. key, key,
-			ns.db, type(default), name, default)
-		setting:SetValueChangedCallback(function() ns.Refresh() end)
-		return setting
-	end
+	local text = page:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -12)
+	text:SetWidth(560)
+	text:SetJustifyH("LEFT")
+	text:SetText("Gamepad QoL's settings have their own window, made for the controller. Press the button "
+		.. "below and it opens as soon as you close this window. You can also open it with /gqol, "
+		.. "or with Y in the button guide (/gqol guide).")
 
-	local bagButtons = Register("bagButtons", "Bag buttons")
-	local function BagButtonOptions()
-		local container = Settings.CreateControlTextContainer()
-		container:Add("row", "Row above the items")
-		container:Add("side", "Column down the left side")
-		container:Add("off", "Blizzard default (in the grid)")
-		return container:GetData()
-	end
-	Settings.CreateDropdown(category, bagButtons, BagButtonOptions,
-		"Where the backpack and bag buttons go in the gamepad bag window. Takes effect the next time you open your bags.")
+	local button = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
+	button:SetSize(200, 26)
+	button:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -16)
+	button:SetText("Open settings")
 
-	Settings.CreateCheckbox(category, Register("autoCleanUp", "Clean up bags when you close them"),
-		"Runs Clean Up Bags every time you close your bags (not in combat). There's also a Clean Up Bags key binding under Key Bindings > AddOns > Gamepad QoL.")
+	local note = page:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	note:SetPoint("LEFT", button, "RIGHT", 12, 0)
+	note:SetText("")
 
-	Settings.CreateCheckbox(category, Register("cleanUpHint", "Show the Clean Up button in your bags"),
-		"Adds the Clean Up button to the button bar under your bags (with Select, Use and Close), as a reminder that it cleans up your bags while they're open.")
-
-	Settings.CreateCheckbox(category, Register("highlightCheapest", "Mark the cheapest items"),
-		"Puts a copper coin and an orange glow on the item(s) in your bags that sell to a vendor for the least (whole stack). Items that can't be sold are left out.")
-
-	local countOptions = Settings.CreateSliderOptions(1, 5, 1)
-	if MinimalSliderWithSteppersMixin then
-		countOptions:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
-	end
-	Settings.CreateSlider(category, Register("cheapestCount", "How many to mark"), countOptions,
-		"How many of the cheapest stacks to mark. With more than one, each is numbered: 1 is the cheapest, the first to sell or drop.")
-
-	-- Controller buttons
-	if CreateSettingsListSectionHeaderInitializer and SettingsPanel and SettingsPanel.GetLayout then
-		local layout = SettingsPanel:GetLayout(category)
-		if layout then
-			layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Controller buttons"))
+	local watcher = CreateFrame("Frame")
+	watcher:Hide()
+	watcher:SetScript("OnUpdate", function(self)
+		if not (SettingsPanel and SettingsPanel:IsShown()) then
+			self:Hide()
+			pendingOpen = false
+			note:SetText("")
+			C_Timer.After(0.2, function() ns.ShowOptions() end)
 		end
-	end
-	local buttonTip = " Pick a stick click with a trigger or shoulder held, or a stick click alone. Combinations work outside combat; R3 and L3 alone keep doing their usual jobs."
-	Settings.CreateDropdown(category, Register("cleanUpButton", "Clean Up Bags (bags open)"), ns.Buttons.Options,
-		"Cleans up your bags while they're open. The button does its usual job again once they close." .. buttonTip)
-	Settings.CreateDropdown(category, Register("inviteButton", "Quick invite"), ns.Buttons.Options,
-		"Invites whoever your target is fighting: target the mob you need for a quest and press it to invite the player killing it. With a player targeted, it invites them. It doesn't work while you're in combat." .. buttonTip)
-	Settings.CreateDropdown(category, Register("peekMapButton", "Peek at the map (hold)"), ns.Buttons.Options,
-		"Hold it to see the map, let go to close it. You keep moving while it's up (outside combat)." .. buttonTip)
+	end)
+	button:SetScript("OnClick", function()
+		pendingOpen = true
+		note:SetText("Opens when you close this window.")
+		watcher:Show()
+	end)
 
-	if CreateSettingsButtonInitializer and SettingsPanel and SettingsPanel.GetLayout then
-		local layout = SettingsPanel:GetLayout(category)
-		if layout then
-			layout:AddInitializer(CreateSettingsButtonInitializer("Button guide", "Show",
-				function() ns.ShowGuide() end,
-				"Shows the window listing your buttons, so you can try them out.", true))
-		end
-	end
-
-	Settings.RegisterAddOnCategory(category)
-end
-
-local function OpenSettings()
-	if ns.settingsCategory and Settings.OpenToCategory then
-		Settings.OpenToCategory(ns.settingsCategory:GetID())
-	end
+	Settings.RegisterAddOnCategory(Settings.RegisterCanvasLayoutCategory(page, page.name))
 end
 
 SLASH_GAMEPADQOL1 = "/gqol"
 SlashCmdList.GAMEPADQOL = function(msg)
 	if (msg or ""):lower():match("guide") then
 		ns.ShowGuide()
+	elseif (msg or ""):lower():match("cheap") and ns.CheapestReport then
+		ns.CheapestReport()
 	else
-		OpenSettings()
+		ns.ShowOptions()
 	end
 end
 
@@ -155,7 +138,7 @@ events:RegisterEvent("PLAYER_LOGIN")
 events:SetScript("OnEvent", function(self, event, arg1)
 	if event == "ADDON_LOADED" and arg1 == ADDON then
 		InitDB()
-		RegisterSettings()
+		RegisterPage()
 	elseif event == "PLAYER_LOGIN" then
 		for _, setup in ipairs(ns.setups or {}) do
 			setup()

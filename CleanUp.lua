@@ -1,14 +1,11 @@
 -- Clean Up Bags without the trip to the bag portrait's menu:
 --  * a controller button while the bags are open (L3 unless changed; Buttons.lua)
---  * a key binding (Key Bindings > AddOns > Gamepad QoL)
 --  * optionally, cleaning up whenever the bags close
 --
 -- Taint: all three run as their own executions (a press, a timer), never inside Blizzard's code.
 -- Gamepad menus can't take an addon entry safely (see Bags.lua), which is why it isn't on the Y menu.
 local ADDON, ns = ...
 
-BINDING_HEADER_GAMEPADQOL = "Gamepad QoL"
-BINDING_NAME_GAMEPADQOL_CLEANUP = BAG_CLEANUP_BAGS or "Clean Up Bags"
 
 local bagsOpen = false
 
@@ -20,10 +17,6 @@ local function CleanUpBags()
 	C_Container.SortBags()
 end
 
--- Called by the key binding.
-function GamepadQoL_CleanUpBags()
-	CleanUpBags()
-end
 
 local function CleanUpIfStillClosed()
 	local bags = ContainerFrameCombinedBags

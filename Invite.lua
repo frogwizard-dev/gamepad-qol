@@ -54,12 +54,6 @@ local function InviteTargetFighter()
 	Say("Invited " .. name .. ".", 0.3, 1, 0.3)
 end
 
--- Called by the key binding.
-function GamepadQoL_QuickInvite()
-	InviteTargetFighter()
-end
-
-BINDING_NAME_GAMEPADQOL_INVITE = "Invite who your target is fighting"
 
 local button = CreateFrame("Button", "GamepadQoLInviteButton", UIParent)
 button:RegisterForClicks("AnyDown")
