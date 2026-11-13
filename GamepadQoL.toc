@@ -1,18 +1,20 @@
 ## Interface: 16001, 120000, 120001, 120005, 120007, 120100
 ## Title: Gamepad QoL
 ## Category: Frog Wizard
-## Notes: Small fixes for Blizzard's gamepad UI: tidier bags, Clean Up on a button, cheapest items marked, quick invite and a peek map.
-## Version: 0.3.0
+## Notes: Small fixes for Blizzard's gamepad UI: tidier bags, Clean Up on a button, junk marked, quick invite, a peek map, one-button quest tracking and pet feeding.
+## Version: 0.4.0
 ## SavedVariables: GamepadQoLDB
 ## IconTexture: Interface\Icons\INV_Misc_Bag_08
 ## X-Curse-Project-ID: 1800157
 
 Core.lua
 Buttons.lua
+Quests.lua
 Bags.lua
 CleanUp.lua
 Invite.lua
 PeekMap.lua
+FeedPet.lua
 Cheapest.lua
 Options.lua
 Welcome.lua

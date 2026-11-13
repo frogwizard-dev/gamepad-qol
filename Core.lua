@@ -14,9 +14,11 @@ ns.DEFAULTS = {
 	cleanUpButton = "PADLSTICK",                -- L3, only while the bags are open
 	inviteButton = "PADRTRIGGER+PADRSTICK",     -- RT held + R3
 	peekMapButton = "PADLTRIGGER+PADRSTICK",    -- LT held + R3, kept held
+	trackQuestButton = "PADLSTICK",             -- L3, only while the quest log has the controller
+	feedPetButton = "PADRSHOULDER+PADRSTICK",   -- RB held + R3, hunters with a pet only
 }
 
-local BUTTON_SETTINGS = { "cleanUpButton", "inviteButton", "peekMapButton" }
+local BUTTON_SETTINGS = { "cleanUpButton", "inviteButton", "peekMapButton", "trackQuestButton", "feedPetButton" }
 
 -- Improved Forever has its own uses for these buttons (L3 cleans up there too, R3 is its wheels),
 -- so with it installed ours start unset and the player picks.

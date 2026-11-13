@@ -1,5 +1,11 @@
 # Gamepad QoL
 
+## 0.4.0
+
+- Track and untrack quests with one button: in the Map & Quest Log, put the cursor on a quest and press L3. On a zone header it tracks all its quests, or untracks them if they're all tracked. It works on a quest's details page too. With the map side focused, L3 is still the map marker.
+- Feed pet (hunters): hold RB and press R3 to feed your pet without opening your bags. It picks food your pet eats at most 10 levels below it (the lowest of those, so better food lasts), or else the highest-level food it will eat. Casting Feed Pet from the action bar opens the gamepad bags, and they could close again straight away.
+- Both buttons can be changed in the settings, and they're in the button guide, which shows once more so you can try them.
+
 ## 0.3.0
 
 - Junk to sell or destroy: when your bags fill up, what should go first? The cheapest junk gets the game's junk coin and a number, 1 for the first to go, by what a vendor pays for the whole stack. The bag window's bottom bar says how many and what they're worth ("5 to sell or destroy · 23c"), and the item's tooltip its place.

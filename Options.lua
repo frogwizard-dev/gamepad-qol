@@ -47,6 +47,10 @@ local ROWS = {
 		tip = "Invites whoever your target is fighting: target the mob you need for a quest and press it. With a player targeted, it invites them. Not while you're in combat." },
 	{ key = "peekMapButton", label = "Peek at the map (hold)", choices = function() return ns.Buttons.Choices() end,
 		tip = "Hold it to see the map, let go to close it. You keep moving while it's up." },
+	{ key = "trackQuestButton", label = "Track / untrack (quest log)", choices = function() return ns.Buttons.Choices() end,
+		tip = "In the Map & Quest Log, tracks or untracks the quest the cursor is on (or every quest under a zone header). With the map side focused the button stays the map marker." },
+	{ key = "feedPetButton", label = "Feed pet (hunters)", choices = function() return ns.Buttons.Choices() end,
+		tip = "Feeds your pet the best food in your bags without opening them: food it eats at most 10 levels below it (the lowest of those, keeping better food for later), else the highest it will eat." },
 	{ action = "guide", label = "Button guide", value = "Show",
 		tip = "Shows the window listing your buttons, so you can try them out." },
 }

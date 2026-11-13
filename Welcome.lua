@@ -8,14 +8,24 @@
 local ADDON, ns = ...
 
 -- Raise when the buttons or what they do change, so players see the guide again.
-local GUIDE_VERSION = 1
+local GUIDE_VERSION = 2
 
 local ROWS = {
 	{ id = "cleanUp", title = "Clean Up Bags", hold = false, before = "Open your bags, then " },
 	{ id = "invite", title = "Quick invite", hold = false, before = "Target a mob someone is fighting (or a player), then ",
 		after = " Not while you're in combat." },
 	{ id = "peekMap", title = "Peek at the map", hold = true, before = "" },
+	{ id = "trackQuest", title = "Track / untrack a quest", hold = false, before = "Open the Map & Quest Log, put the cursor on a quest, then " },
+	{ id = "feedPet", title = "Feed pet", hold = false, before = "With your pet out, ", hunter = true },
 }
+-- Hunter-only rows are left out for everyone else.
+if select(2, UnitClass("player")) ~= "HUNTER" then
+	for i = #ROWS, 1, -1 do
+		if ROWS[i].hunter then
+			table.remove(ROWS, i)
+		end
+	end
+end
 
 local NAMES = ns.Buttons.SHORT_NAMES
 
