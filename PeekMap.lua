@@ -1,19 +1,10 @@
--- Peek map: hold the button and the map shows; let go and it closes. A map you opened yourself is
--- left alone.
---
--- Opening a game window from addon code taints it on Forever, so the button is a secure one and
--- everything happens in its secure snippet:
---  * out of combat the map is shown directly, not opened as a window, so Forever's gamepad UI
---    doesn't take the controller and you keep moving;
---  * in combat (when the snippet can't touch the map) it runs "/click QuestLogMicroButton", the
---    game's own button for the Map & Quest Log, once to open and once to close;
---  * the map's first showing goes through that button too: until it has been opened as a window it
---    has no size, and shown directly it would be drawn nowhere.
--- (Improved Forever's peek map, by markgravity, MIT, showed the way.)
-local ADDON, ns = ...
+-- Peek map: hold the button and the map shows; let go and it closes (a map you opened is left alone).
+-- Opening a game window from addon code taints it on Forever, so all of it is a secure snippet: out of
+-- combat the map is shown directly (not as a window, so the gamepad UI doesn't take the controller); in
+-- combat, and the first time (it has no size until opened as a window), it clicks QuestLogMicroButton.
+local _, ns = ...
 
 local MACRO = "/click QuestLogMicroButton"
-
 
 local button = CreateFrame("Button", "GamepadQoLPeekMapButton", UIParent,
 	"SecureActionButtonTemplate, SecureHandlerBaseTemplate")
@@ -22,8 +13,8 @@ button:SetPoint("TOPLEFT", UIParent, "TOPLEFT", -20, 20)
 button:RegisterForClicks("AnyDown", "AnyUp")
 button:SetAttribute("macrotext", MACRO)
 
--- Runs before the button's own click. Returning false stops the click; otherwise the macro runs, on
--- this press or release whatever the "cast on key down" setting says (useOnKeyDown).
+-- Runs before the button's own click (Improved Forever's peek map, by markgravity, MIT, showed the way).
+-- Returning false stops the click; otherwise the macro runs on this press or release (useOnKeyDown).
 SecureHandlerWrapScript(button, "OnClick", button, [[
 	self:SetAttribute("type", nil)
 	local map = self:GetFrameRef("map")
@@ -59,7 +50,7 @@ SecureHandlerWrapScript(button, "OnClick", button, [[
 	self:SetAttribute("type", "macro")
 ]])
 
-ns.Buttons.Add("peekMap", "Peek at the map (hold)", button)
+ns.Buttons.Add("peekMap", button)
 
 -- After the secure part has run (our own button's script; nothing of Blizzard's).
 button:SetScript("PostClick", function(_, _, down)

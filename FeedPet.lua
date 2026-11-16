@@ -1,20 +1,10 @@
--- Feed pet in one press: casts Feed Pet straight onto the best food in your bags, so the bag window
--- never has to open. (Cast from the action bar, Feed Pet opens the gamepad bags to pick the food, and
--- on Forever they can close again at once.)
---
--- The best food: something your pet eats (C_PetInfo.CanPetEatItem) at most 10 levels below it, where
--- feeding does the most for its happiness; of those the lowest-level one, so better food is kept for
--- later. With none that close, the highest-level food it will eat.
---
--- A secure button of ours runs "/cast Feed Pet" then "/use <bag> <slot>". The food is picked out of
--- combat, whenever bags, the pet or levels change, as the macro can't change in combat.
-local ADDON, ns = ...
+-- Feed pet in one press: casts Feed Pet straight onto the best food in your bags, so the bag window never
+-- opens (cast from the action bar, Feed Pet opens the gamepad bags, which on Forever can close again at
+-- once). A secure button of ours runs "/cast Feed Pet" then "/use <bag> <slot>"; the macro can't change
+-- in combat, so the food is picked outside it, whenever bags, the pet or levels change.
+local _, ns = ...
 
 local FEED_PET = 6991
-
-local function Say(text, r, g, b)
-	UIErrorsFrame:AddMessage(text, r or 1, g or 0.82, b or 0)
-end
 
 local function KnowsFeedPet()
 	return (IsPlayerSpell and IsPlayerSpell(FEED_PET)) or (IsSpellKnown and IsSpellKnown(FEED_PET)) or false
@@ -28,13 +18,14 @@ local function SpellName()
 end
 
 local function NumBags()
-	local consts = Constants and Constants.InventoryConstants
-	return consts and consts.NumBagSlots or NUM_BAG_SLOTS or 4
+	local constants = Constants and Constants.InventoryConstants
+	return constants and constants.NumBagSlots or NUM_BAG_SLOTS or 4
 end
 
 local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 
--- bag, slot, item name of the food to use; nil if there's none.
+-- bag, slot, item name of the food to use; nil if there's none. Food at most 10 levels below the pet
+-- does the most for its happiness: the lowest of those (better food lasts), else the highest it eats.
 local function PickFood()
 	if not (C_PetInfo and C_PetInfo.CanPetEatItem) or not UnitExists("pet") then
 		return nil
@@ -100,16 +91,16 @@ button:SetScript("PostClick", function(_, _, down)
 	end
 	ns.GuideTried("feedPet")
 	if not UnitExists("pet") then
-		Say(ERR_NO_PET or "You don't have a pet.")
+		ns.Say(ERR_NO_PET or "You don't have a pet.")
 	elseif UnitIsDead("pet") then
-		Say("Your pet is dead.")
+		ns.Say("Your pet is dead.")
 	elseif not foodName then
-		Say("No food in your bags that your pet will eat.")
+		ns.Say("No food in your bags that your pet will eat.")
 	end
 	C_Timer.After(0.5, UpdateMacro)
 end)
 
-ns.Buttons.Add("feedPet", "Feed your pet", button, function()
+ns.Buttons.Add("feedPet", button, function()
 	return KnowsFeedPet() and UnitExists("pet")
 end)
 

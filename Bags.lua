@@ -1,14 +1,8 @@
--- Gamepad bag window tweaks:
---  * Blizzard puts the backpack and bag buttons inside the item grid (the backpack ends up in the
---    far top-left). We lay the items out again without them and put the buttons in their own row
---    above the items, or in a column down the left side.
---
--- Taint: everything here runs after Blizzard's own code (hooksecurefunc) and only moves or resizes
--- frames. It never writes into Blizzard's tables, menus or the gamepad binding stack.
--- Don't add entries to gamepad menus (Menu.ModifyMenu): an addon-made entry taints the menu's
--- close, which runs through the gamepad binding stack, and the action bars' protected
--- SetPreferredGamepadInteractTarget is then forbidden (seen in 0.1.0 testing).
-local ADDON, ns = ...
+-- Gamepad bag window: Blizzard puts the bag buttons inside the item grid (the backpack far top-left).
+-- We lay the items out again without them and put the buttons in a row above, or down the left side.
+-- Taint: only hooksecurefunc after Blizzard's code, only moving and sizing frames. Never add gamepad
+-- menu entries (Menu.ModifyMenu): that taints the menu's close and forbids SetPreferredGamepadInteractTarget.
+local _, ns = ...
 
 local SPACING = 5   -- Blizzard's ITEM_SPACING_X / ITEM_SPACING_Y (locals in ContainerFrame.lua)
 local ROW_GAP = 6   -- gap between the bag row and the items
@@ -37,20 +31,21 @@ local function SortBagID(item)
 	return bagID
 end
 
-local function SortItems(a, b)
-	local bagA, bagB = SortBagID(a), SortBagID(b)
-	if bagA ~= bagB then
-		return bagA > bagB
+local function SortItems(first, second)
+	local firstBag, secondBag = SortBagID(first), SortBagID(second)
+	if firstBag ~= secondBag then
+		return firstBag > secondBag
 	end
-	return a:GetID() > b:GetID()
+	return first:GetID() > second:GetID()
 end
 
-local function SortItemsByExtendedState(a, b)
-	local extA, extB = a.IsExtended and a:IsExtended(), b.IsExtended and b:IsExtended()
-	if extA ~= extB then
-		return not extA
+local function SortItemsByExtendedState(first, second)
+	local firstExtended = first.IsExtended and first:IsExtended()
+	local secondExtended = second.IsExtended and second:IsExtended()
+	if firstExtended ~= secondExtended then
+		return not firstExtended
 	end
-	return SortItems(a, b)
+	return SortItems(first, second)
 end
 
 local function CollectItems(frame)
@@ -94,11 +89,11 @@ local function RowsHeight(frame, rows)
 end
 
 local function BagRowHeight(buttons)
-	local h = 0
+	local height = 0
 	for _, button in ipairs(buttons) do
-		h = math.max(h, button:GetHeight())
+		height = math.max(height, button:GetHeight())
 	end
-	return h
+	return height
 end
 
 -- Blizzard sizes the window for items plus a slot per bag button. Size it for the items alone,
@@ -159,25 +154,18 @@ local function LayOut(frame)
 	end
 
 	if mode == "row" then
-		-- Left to right above the top row of items, starting at the grid's left edge: the backpack
-		-- first, as in Blizzard's own bag order.
-		--
-		-- Each button sits straight above an item of its column, anchored to it. The gamepad's grid
-		-- navigation puts buttons in one column only when their centres' x are exactly equal; a
-		-- button placed by adding up widths lands a fraction off and becomes a column of its own,
-		-- which made left / right zig-zag between the bag row and the items.
+		-- Left to right above the items from the grid's left edge, backpack first. Each button is anchored
+		-- above an item of its column: grid navigation needs exactly equal centres, or left / right zig-zags.
 		local columns = frame:GetColumns()
 		local info = C_XMLUtil.GetTemplateInfo(frame.itemButtonPool:GetTemplate())
 		local stepX, stepY = info.width + SPACING, info.height + SPACING
 		local rows = math.max(1, math.ceil(#items / columns))
 
-		-- Items fill from the bottom right, leftward then up: item k is in row floor((k-1)/columns)
-		-- from the bottom and column columns - (k-1) % columns from the left. Keep each column's
-		-- lowest item.
-		local lowest = {}  -- [column from the left] = { item, row }
-		for k, item in ipairs(items) do
-			local row = math.floor((k - 1) / columns)
-			local column = columns - (k - 1) % columns
+		-- Items fill from the bottom right, leftward then up, so the first met in a column is its lowest.
+		local lowest = {}  -- [column from the left] = { item, row from the bottom }
+		for index, item in ipairs(items) do
+			local row = math.floor((index - 1) / columns)
+			local column = columns - (index - 1) % columns
 			if not lowest[column] then
 				lowest[column] = { item = item, row = row }
 			end
@@ -198,9 +186,8 @@ local function LayOut(frame)
 			end
 		end
 	else -- "side"
-		-- Top to bottom just outside the window's left edge, on a dark strip. Every button is placed
-		-- from the same point of the window with the same x, so their centres line up exactly: the
-		-- gamepad's grid navigation needs that to see them as one column (as in the row above).
+		-- Top to bottom outside the window's left edge, on a dark strip, all from one point with the same
+		-- x so their centres line up exactly (grid navigation needs that, as above).
 		local info = C_XMLUtil.GetTemplateInfo(frame.itemButtonPool:GetTemplate())
 		local stepY = info.height + SPACING
 		local x = -8 - info.width / 2
@@ -209,11 +196,11 @@ local function LayOut(frame)
 			button:SetPoint("TOP", frame, "TOPLEFT", x, -40 - (i - 1) * stepY)
 		end
 
-		local bg = GetSideBackground(frame)
-		bg:ClearAllPoints()
-		bg:SetPoint("TOPRIGHT", frame, "TOPLEFT", -3, -35)
-		bg:SetSize(info.width + 10, #buttons * stepY - SPACING + 10)
-		bg:Show()
+		local background = GetSideBackground(frame)
+		background:ClearAllPoints()
+		background:SetPoint("TOPRIGHT", frame, "TOPLEFT", -3, -35)
+		background:SetSize(info.width + 10, #buttons * stepY - SPACING + 10)
+		background:Show()
 	end
 end
 

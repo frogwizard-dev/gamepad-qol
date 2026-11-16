@@ -1,17 +1,10 @@
--- Gamepad QoL's settings, in a window of our own, driven by the controller or the mouse.
---
--- Not Blizzard's Settings window: there, the game calls an addon's code and reads its values while
--- it works, and on Forever's gamepad UI closing it then gets SetPreferredGamepadInteractTarget
--- forbidden. (Improved Forever does the same, with its own window.) Blizzard's AddOns list only gets
--- a page saying where the settings are, with a button to open them (Core.lua).
---
--- While the window is open and no game window has the controller, the D-pad, A and B are ours, by
--- priority override bindings to buttons of ours (Buttons.lua's way): up / down pick a setting,
--- left / right change it, A changes it too (or runs it), B closes. Out of combat only: it closes
--- when a fight starts. Rows can be clicked too (right-click goes back a choice).
-local ADDON, ns = ...
+-- Gamepad QoL's settings, in a window of our own driven by the controller or the mouse. Not Blizzard's
+-- Settings window: it calls addon code while it works, and closing it then gets Forever's protected
+-- SetPreferredGamepadInteractTarget forbidden (Improved Forever has its own window too). While it's open
+-- the D-pad picks and changes, A changes or runs, B closes (out of combat only); rows take clicks too.
+local _, ns = ...
 
-local ROW_H = 26
+local ROW_HEIGHT = 26
 local WIDTH = 600
 
 -- The settings, in order. Kinds: bool, choices ({ value, label } pairs, or a function giving them),
@@ -40,6 +33,12 @@ local ROWS = {
 	{ key = "junkStyle", label = "Mark style", choices = ns.JUNK_STYLES, preview = true,
 		tip = "How junk is marked. The slots below show the style you've picked." },
 
+	{ header = "At a vendor" },
+	{ key = "autoRepair", label = "Repair everything", bool = true,
+		tip = "As a vendor that can repair opens, repairs all your gear (if you have the money). A message says what it cost." },
+	{ key = "autoSellGreys", label = "Sell grey items", bool = true,
+		tip = "As a vendor opens, sells your grey (poor quality) items, up to 12 at a time so every one can still be bought back. Only greys: whites and greens marked as junk are left for you to decide." },
+
 	{ header = "Controller buttons" },
 	{ key = "cleanUpButton", label = "Clean Up Bags (bags open)", choices = function() return ns.Buttons.Choices() end,
 		tip = "Cleans up your bags while they're open; the button does its usual job again once they close." },
@@ -55,9 +54,9 @@ local ROWS = {
 		tip = "Shows the window listing your buttons, so you can try them out." },
 }
 
-local frame, owner, selected
-local rowFrames, selectable = {}, {}
-local navBound = false
+local frame, selected
+local entries = {}      -- per row in ROWS: { row } and, for a setting, its highlight, label and value
+local selectable = {}   -- the entries the cursor stops on
 
 local function Choices(row)
 	return type(row.choices) == "function" and row.choices() or row.choices
@@ -81,11 +80,6 @@ local function ValueText(row)
 	return tostring(value)
 end
 
-local function UIFocused()
-	local manager = GamepadMode and GamepadMode.FrameControlsManager
-	return manager and manager.isUIFocused and true or false
-end
-
 local preview = {}  -- the sample slots under the window
 
 local function RefreshPreview()
@@ -95,24 +89,24 @@ local function RefreshPreview()
 end
 
 local function Refresh()
-	for _, r in ipairs(rowFrames) do
-		if r.row and not r.row.header then
-			r.value:SetText(r.row.action and r.row.value or ("<  " .. ValueText(r.row) .. "  >"))
-			r.highlight:SetShown(r == selected)
+	for _, entry in ipairs(entries) do
+		if not entry.row.header then
+			entry.value:SetText(entry.row.action and entry.row.value or ("<  " .. ValueText(entry.row) .. "  >"))
+			entry.highlight:SetShown(entry == selected)
 		end
 	end
 	frame.tip:SetText(selected and selected.row.tip or "")
 	RefreshPreview()
 end
 
-local function Select(r)
-	selected = r
+local function Select(entry)
+	selected = entry
 	Refresh()
 end
 
--- Change a row by dir (+1 / -1); an action runs.
-local function Change(r, dir)
-	local row = r.row
+-- Move a setting on (+1) or back (-1); an action runs.
+local function Change(entry, direction)
+	local row = entry.row
 	if row.action == "guide" then
 		frame:Hide()
 		C_Timer.After(0, ns.ShowGuide)
@@ -122,9 +116,9 @@ local function Change(r, dir)
 	if row.bool then
 		ns.db[key] = not ns.db[key]
 	elseif row.range then
-		local v = (ns.db[key] or row.range[1]) + dir
-		if v > row.range[2] then v = row.range[1] elseif v < row.range[1] then v = row.range[2] end
-		ns.db[key] = v
+		local value = (ns.db[key] or row.range[1]) + direction
+		if value > row.range[2] then value = row.range[1] elseif value < row.range[1] then value = row.range[2] end
+		ns.db[key] = value
 	else
 		local choices = Choices(row)
 		local index = 1
@@ -133,24 +127,24 @@ local function Change(r, dir)
 				index = i
 			end
 		end
-		index = (index - 1 + dir) % #choices + 1
+		index = (index - 1 + direction) % #choices + 1
 		ns.db[key] = choices[index][1]
 	end
 	Refresh()
 	ns.Refresh()
 end
 
-local function Move(dir)
+local function Move(direction)
 	if not selected then
 		return
 	end
 	local index = 1
-	for i, r in ipairs(selectable) do
-		if r == selected then
+	for i, entry in ipairs(selectable) do
+		if entry == selected then
 			index = i
 		end
 	end
-	index = (index - 1 + dir) % #selectable + 1
+	index = (index - 1 + direction) % #selectable + 1
 	Select(selectable[index])
 end
 
@@ -163,40 +157,9 @@ local NAV = {
 	PAD1 = function() if selected then Change(selected, 1) end end,
 	PAD2 = function() frame:Hide() end,
 }
-local navButtons = {}
-
-local function UpdateNavBindings()
-	local want = frame and frame:IsShown() and not UIFocused() and not InCombatLockdown()
-	if want == navBound or InCombatLockdown() then
-		return
-	end
-	if want then
-		for key, button in pairs(navButtons) do
-			SetOverrideBindingClick(owner, true, key, button:GetName(), "LeftButton")
-		end
-	else
-		ClearOverrideBindings(owner)
-	end
-	navBound = want
-end
 
 local function Build()
-	frame = CreateFrame("Frame", "GamepadQoLOptions", UIParent, "BackdropTemplate")
-	frame:SetFrameStrata("DIALOG")
-	frame:SetBackdrop({
-		bgFile = "Interface\\Buttons\\WHITE8X8",
-		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-		edgeSize = 14,
-		insets = { left = 3, right = 3, top = 3, bottom = 3 },
-	})
-	frame:SetBackdropColor(0.04, 0.04, 0.05, 0.95)
-	frame:SetBackdropBorderColor(0.8, 0.65, 0.25)
-	frame:EnableMouse(true)
-	frame:SetMovable(true)
-	frame:RegisterForDrag("LeftButton")
-	frame:SetScript("OnDragStart", frame.StartMoving)
-	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-	frame:Hide()
+	frame = ns.Window("GamepadQoLOptions", 0.95)
 
 	local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	title:SetPoint("TOP", 0, -14)
@@ -204,40 +167,41 @@ local function Build()
 
 	local y = -42
 	for _, row in ipairs(ROWS) do
-		local r = { row = row }
+		local entry = { row = row }
 		if row.header then
 			local text = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 			text:SetPoint("TOPLEFT", 18, y - 8)
 			text:SetText(row.header)
 			text:SetTextColor(1, 0.82, 0)
-			y = y - ROW_H - 4
+			y = y - ROW_HEIGHT - 4
 		else
-			local b = CreateFrame("Button", nil, frame)
-			b:SetPoint("TOPLEFT", 12, y)
-			b:SetPoint("TOPRIGHT", -12, y)
-			b:SetHeight(ROW_H)
-			b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-			r.highlight = b:CreateTexture(nil, "BACKGROUND")
-			r.highlight:SetAllPoints()
-			r.highlight:SetColorTexture(1, 0.82, 0, 0.15)
-			r.highlight:Hide()
-			local hover = b:CreateTexture(nil, "HIGHLIGHT")
+			local button = CreateFrame("Button", nil, frame)
+			button:SetPoint("TOPLEFT", 12, y)
+			button:SetPoint("TOPRIGHT", -12, y)
+			button:SetHeight(ROW_HEIGHT)
+			button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+			entry.highlight = button:CreateTexture(nil, "BACKGROUND")
+			entry.highlight:SetAllPoints()
+			entry.highlight:SetColorTexture(1, 0.82, 0, 0.15)
+			entry.highlight:Hide()
+			local hover = button:CreateTexture(nil, "HIGHLIGHT")
 			hover:SetAllPoints()
 			hover:SetColorTexture(1, 1, 1, 0.05)
-			r.label = b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-			r.label:SetPoint("LEFT", 16, 0)
-			r.label:SetText(row.label)
-			r.value = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-			r.value:SetPoint("RIGHT", -12, 0)
-			b:SetScript("OnClick", function(_, mouse)
-				Select(r)
-				Change(r, mouse == "RightButton" and -1 or 1)
+			entry.label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+			entry.label:SetPoint("LEFT", 16, 0)
+			entry.label:SetText(row.label)
+			entry.value = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+			entry.value:SetPoint("RIGHT", -12, 0)
+			-- A click moves the setting on, a right-click back.
+			button:SetScript("OnClick", function(_, mouseButton)
+				Select(entry)
+				Change(entry, mouseButton == "RightButton" and -1 or 1)
 			end)
-			b:SetScript("OnEnter", function() Select(r) end)
-			selectable[#selectable + 1] = r
-			y = y - ROW_H
+			button:SetScript("OnEnter", function() Select(entry) end)
+			selectable[#selectable + 1] = entry
+			y = y - ROW_HEIGHT
 			if row.preview then
-				-- Three sample bag slots, marked in the chosen style, just under the row.
+				-- Three sample bag slots, marked in the chosen style, under the row.
 				for i = 1, 3 do
 					local slot = CreateFrame("Frame", nil, frame)
 					slot:SetSize(37, 37)
@@ -256,7 +220,7 @@ local function Build()
 				y = y - 46
 			end
 		end
-		rowFrames[#rowFrames + 1] = r
+		entries[#entries + 1] = entry
 	end
 
 	frame.tip = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -270,41 +234,23 @@ local function Build()
 	hint:SetPoint("BOTTOM", 0, 14)
 	hint:SetText("D-pad up / down: pick  ·  left / right or A: change  ·  B: close")
 
-	local close = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-	close:SetSize(80, 22)
-	close:SetPoint("BOTTOMRIGHT", -12, 10)
-	close:SetText(CLOSE or "Close")
-	close:SetScript("OnClick", function() frame:Hide() end)
-
 	frame:SetSize(WIDTH, -y + 44 + 60)
 	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
 
-	owner = CreateFrame("Frame")
-	for key, fn in pairs(NAV) do
-		local b = CreateFrame("Button", "GamepadQoLOptions" .. key, UIParent)
-		b:Hide()
-		b:RegisterForClicks("AnyDown")
-		b:SetScript("OnClick", fn)
-		navButtons[key] = b
+	local navButtons = {}
+	for key, Press in pairs(NAV) do
+		local button = CreateFrame("Button", "GamepadQoLOptions" .. key, UIParent)
+		button:Hide()
+		button:RegisterForClicks("AnyDown")
+		button:SetScript("OnClick", Press)
+		navButtons[key] = button
 	end
-
-	local elapsed = 0
-	frame:SetScript("OnUpdate", function(_, dt)
-		elapsed = elapsed + dt
-		if elapsed > 0.1 then
-			elapsed = 0
-			UpdateNavBindings()
-		end
-	end)
+	local UpdateBindings = ns.Buttons.BindWhileOpen(frame, navButtons)
 	frame:SetScript("OnShow", function()
 		Select(selected or selectable[1])
-		UpdateNavBindings()
+		UpdateBindings()
 	end)
-	frame:SetScript("OnHide", function()
-		UpdateNavBindings()
-	end)
-	frame:RegisterEvent("PLAYER_REGEN_DISABLED")
-	frame:SetScript("OnEvent", function() frame:Hide() end)
+	frame:SetScript("OnHide", UpdateBindings)
 end
 
 function ns.ShowOptions()

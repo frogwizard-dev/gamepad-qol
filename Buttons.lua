@@ -1,27 +1,20 @@
--- Controller buttons for our features, without tainting Forever's gamepad UI.
---
--- Each feature is a hidden button of ours. Its controller press is a priority override binding
--- (SetOverrideBindingClick) that clicks it. Nothing of Blizzard's gamepad code is touched: its
--- binding stack, frame manager and windows stay untainted. Bindings can only change out of combat.
--- (The technique is Improved Forever's, by markgravity, MIT: github.com/markgravity/ImprovedForever.)
---
--- A feature's button is either a stick click alone ("PADLSTICK") or one with a trigger or shoulder
--- held ("PADLTRIGGER+PADRSTICK"). Forever handles its triggers and shoulders itself (crossbar and
--- targeting), not as Shift / Ctrl / Alt, so a combination can't be one binding key. Instead the
--- stick click is bound to us only while that trigger or shoulder is physically held, and handed
--- straight back when it's let go: R3 alone stays the game's ping (and its wheel when held). As
--- bindings can't change in combat, combinations work outside it.
-local ADDON, ns = ...
+-- Controller buttons for our features, without tainting Forever's gamepad UI: each feature is a hidden
+-- button of ours, clicked by a priority override binding (SetOverrideBindingClick), so Blizzard's binding
+-- stack, frame manager and windows are never touched. Bindings only change out of combat. The way to do
+-- it is Improved Forever's (markgravity, MIT: github.com/markgravity/ImprovedForever).
+local _, ns = ...
 
 local Buttons = {}
 ns.Buttons = Buttons
 
 local owner = CreateFrame("Frame")
-local features = {}   -- in the order added: { id, label, button, active() }
+local features = {}   -- in the order added: { id, button, active() }
 local pending = false
 local lastSignature
 local bound = {}      -- [key] = feature bound there now
 
+-- A button: a stick click alone ("PADLSTICK") or with a trigger or shoulder held ("PADLTRIGGER+PADRSTICK").
+-- Triggers aren't modifiers on Forever, so the click is ours only while one is held; R3 alone stays the ping.
 local NAMES = {
 	PADLSTICK = "L3", PADRSTICK = "R3",
 	PADLTRIGGER = "LT / L2", PADRTRIGGER = "RT / R2",
@@ -66,7 +59,6 @@ function Buttons.Label(spec)
 	return NAMES[pressed] or pressed
 end
 
--- The choices for a settings dropdown.
 -- The choices for a button setting, as { value, label } pairs (Options.lua).
 function Buttons.Choices()
 	local choices = { { "none", "Not set" } }
@@ -110,22 +102,21 @@ end
 local function Wanted(combatStarting)
 	local want = {}
 	local uiFocused = UIFocused()
-	-- Combinations first: while their trigger or shoulder is held they win the stick click. One
-	-- already bound keeps it while its stick is still down, so the release reaches us too (the peek
-	-- map closes on it).
-	for _, f in ipairs(features) do
-		local held, pressed = Parse(Buttons.KeyFor(f.id))
-		if held and (not f.active or f.active()) and not want[pressed] then
-			local keep = bound[pressed] == f and IsKeyDown(pressed)
+	-- Combinations first, while their trigger or shoulder is held. One already bound keeps its stick
+	-- while that's still down, so the release reaches us too (the peek map closes on it).
+	for _, feature in ipairs(features) do
+		local held, pressed = Parse(Buttons.KeyFor(feature.id))
+		if held and (not feature.active or feature.active()) and not want[pressed] then
+			local keep = bound[pressed] == feature and IsKeyDown(pressed)
 			if keep or (not combatStarting and not uiFocused and IsKeyDown(held)) then
-				want[pressed] = f
+				want[pressed] = feature
 			end
 		end
 	end
-	for _, f in ipairs(features) do
-		local held, pressed = Parse(Buttons.KeyFor(f.id))
-		if not held and pressed and pressed ~= "none" and (not f.active or f.active()) and not want[pressed] then
-			want[pressed] = f
+	for _, feature in ipairs(features) do
+		local held, pressed = Parse(Buttons.KeyFor(feature.id))
+		if not held and pressed and pressed ~= "none" and (not feature.active or feature.active()) and not want[pressed] then
+			want[pressed] = feature
 		end
 	end
 	return want
@@ -141,8 +132,8 @@ function Buttons.Apply(combatStarting)
 	pending = false
 	local want = Wanted(combatStarting)
 	local parts = {}
-	for key, f in pairs(want) do
-		parts[#parts + 1] = key .. "=" .. f.id
+	for key, feature in pairs(want) do
+		parts[#parts + 1] = key .. "=" .. feature.id
 	end
 	table.sort(parts)
 	local signature = table.concat(parts, ",")
@@ -152,23 +143,54 @@ function Buttons.Apply(combatStarting)
 	lastSignature = signature
 	ClearOverrideBindings(owner)
 	wipe(bound)
-	for key, f in pairs(want) do
-		SetOverrideBindingClick(owner, true, key, f.button:GetName(), "LeftButton")
-		bound[key] = f
+	for key, feature in pairs(want) do
+		SetOverrideBindingClick(owner, true, key, feature.button:GetName(), "LeftButton")
+		bound[key] = feature
 	end
 end
 
--- id: the feature (its setting is ns.db[id .. "Button"]); label: for the settings; button: a named
--- Button of ours; active: optional, true while the binding should be there.
-function Buttons.Add(id, label, button, active)
-	features[#features + 1] = { id = id, label = label, button = button, active = active }
+-- id: the feature (its setting is ns.db[id .. "Button"]); button: a named Button of ours; active:
+-- optional, true while the binding should be there.
+function Buttons.Add(id, button, active)
+	features[#features + 1] = { id = id, button = button, active = active }
+end
+
+-- While `frame` (one of our windows) is open, out of combat and no gamepad window has the controller,
+-- `keys` ([key] = button of ours) click those buttons. Returns the check, for the window's OnShow and OnHide.
+function Buttons.BindWhileOpen(frame, keys)
+	local keysOwner = CreateFrame("Frame")
+	local keysBound = false
+	local function Update()
+		local want = frame:IsShown() and not UIFocused() and not InCombatLockdown()
+		if want == keysBound or InCombatLockdown() then
+			return
+		end
+		if want then
+			for key, button in pairs(keys) do
+				SetOverrideBindingClick(keysOwner, true, key, button:GetName(), "LeftButton")
+			end
+		else
+			ClearOverrideBindings(keysOwner)
+		end
+		keysBound = want
+	end
+	-- Checked ten times a second while it's open: a gamepad window can take the controller at any time.
+	local elapsed = 0
+	frame:SetScript("OnUpdate", function(_, sinceLast)
+		elapsed = elapsed + sinceLast
+		if elapsed > 0.1 then
+			elapsed = 0
+			Update()
+		end
+	end)
+	return Update
 end
 
 -- Watch the triggers and shoulders while any combination is set (cheap: a few key reads a frame,
 -- and bindings only change when the answer does).
 local function AnyCombination()
-	for _, f in ipairs(features) do
-		if Parse(Buttons.KeyFor(f.id)) then
+	for _, feature in ipairs(features) do
+		if Parse(Buttons.KeyFor(feature.id)) then
 			return true
 		end
 	end

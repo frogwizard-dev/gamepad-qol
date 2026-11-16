@@ -1,11 +1,7 @@
 -- Quick invite: one button invites whoever your target is fighting. Target the mob you need for a
 -- quest and press it, and the player killing it gets a party invite. Target a player and it invites
 -- them.
-local ADDON, ns = ...
-
-local function Say(text, r, g, b)
-	UIErrorsFrame:AddMessage(text, r or 1, g or 0.82, b or 0)
-end
+local _, ns = ...
 
 local function InGroupWith(unit)
 	return UnitInParty(unit) or UnitInRaid(unit)
@@ -40,7 +36,7 @@ local function InviteTargetFighter()
 	ns.GuideTried("invite")
 	local unit, why = Pick()
 	if not unit then
-		Say(why)
+		ns.Say(why)
 		return
 	end
 	-- On Forever UnitName's second return is the character's surname, not a realm, so only the
@@ -51,13 +47,12 @@ local function InviteTargetFighter()
 	else
 		InviteUnit(name)
 	end
-	Say("Invited " .. name .. ".", 0.3, 1, 0.3)
+	ns.Say("Invited " .. name .. ".", 0.3, 1, 0.3)
 end
-
 
 local button = CreateFrame("Button", "GamepadQoLInviteButton", UIParent)
 button:RegisterForClicks("AnyDown")
 button:Hide()
 button:SetScript("OnClick", InviteTargetFighter)
 
-ns.Buttons.Add("invite", "Invite who your target is fighting", button)
+ns.Buttons.Add("invite", button)

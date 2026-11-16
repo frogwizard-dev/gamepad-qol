@@ -1,5 +1,9 @@
 # Gamepad QoL
 
+## 0.5.0
+
+- At a vendor: your gear is repaired and your grey items are sold as the window opens, so there's no steering to the vendor's buttons with the controller. A message says what it cost and what you got ("Repaired for 1g 2s, sold 6 grey items for 43s"). Greys only, and at most 12 at a time, so each can still be bought back; whites and greens marked as junk are left to you. Both can be turned off in the settings, under "At a vendor".
+
 ## 0.4.0
 
 - Track and untrack quests with one button: in the Map & Quest Log, put the cursor on a quest and press L3. On a zone header it tracks all its quests, or untracks them if they're all tracked. It works on a quest's details page too. With the map side focused, L3 is still the map marker.

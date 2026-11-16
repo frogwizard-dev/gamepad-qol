@@ -1,11 +1,8 @@
--- Clean Up Bags without the trip to the bag portrait's menu:
---  * a controller button while the bags are open (L3 unless changed; Buttons.lua)
---  * optionally, cleaning up whenever the bags close
---
--- Taint: all three run as their own executions (a press, a timer), never inside Blizzard's code.
--- Gamepad menus can't take an addon entry safely (see Bags.lua), which is why it isn't on the Y menu.
-local ADDON, ns = ...
-
+-- Clean Up Bags without the trip to the bag portrait's menu: a controller button while the bags are
+-- open (L3 unless changed; Buttons.lua), and optionally whenever the bags close. Taint: both run as
+-- their own executions (a press, a timer), never inside Blizzard's code. It isn't on the Y menu, as
+-- gamepad menus can't take an addon entry safely (see Bags.lua).
+local _, ns = ...
 
 local bagsOpen = false
 
@@ -16,7 +13,6 @@ local function CleanUpBags()
 	PlaySound(SOUNDKIT.UI_BAG_SORTING_01)
 	C_Container.SortBags()
 end
-
 
 local function CleanUpIfStillClosed()
 	local bags = ContainerFrameCombinedBags
@@ -43,7 +39,7 @@ button:SetScript("OnClick", function(_, _, down)
 	heldOnPress = false
 end)
 
-ns.Buttons.Add("cleanUp", "Clean Up Bags (while your bags are open)", button, function()
+ns.Buttons.Add("cleanUp", button, function()
 	return bagsOpen
 end)
 
@@ -53,20 +49,12 @@ ns.OnLogin(function()
 		return
 	end
 
-	-- A frame of our own inside the bag window: it shows and hides with the window, so we hear about
-	-- both without hooking any of Blizzard's frames. Hiding the whole UI (Alt+Z) hides it too, but
-	-- the bag window still counts as shown then.
+	-- A frame of ours inside the bag window shows and hides with it, so we hear of both without hooking
+	-- Blizzard's frames. (Alt+Z hides it too, while the bag window still counts as shown.)
 	local watcher = CreateFrame("Frame", nil, bags)
 	watcher:SetAllPoints(bags)
 
-	-- The Clean Up button in Blizzard's prompt bar under the bags ("L3  Clean Up Bags"), as one more
-	-- section on its left end. It's a frame of ours drawn with the bar's own artwork, attached to
-	-- the bar so it shows and hides with it; nothing is added to Blizzard's footer itself (that
-	-- would put us in the gamepad's binding handling). The button icons come from the game's icon
-	-- set by name and are drawn on our own textures (its icon template registers itself with a
-	-- shared manager, so it isn't used).
-	-- Before the prompt bar exists (or if a client has none), the same text goes in the bag
-	-- window's bottom bar instead.
+	-- Until the prompt bar exists (or on a client without one), the hint goes in the bag window's bottom bar.
 	local barHint = watcher:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	if bags.MoneyFrame then
 		watcher:SetFrameLevel(bags.MoneyFrame:GetFrameLevel() + 5)
@@ -77,6 +65,8 @@ ns.OnLogin(function()
 
 	local piece  -- the prompt bar section, made the first time the bar is there
 
+	-- The button icons by name from the game's icon set, drawn on our own textures (its icon template
+	-- registers itself with a shared manager, so it isn't used).
 	local function IconAtlas(key)
 		local util = InputIconTextureSetUtility
 		if not (util and util.GetActiveInputIconButtonTextures and InputDeviceIconVariant) then
@@ -103,11 +93,12 @@ ns.OnLogin(function()
 		return true
 	end
 
+	-- "L3  Clean Up Bags" as one more section of Blizzard's prompt bar: a frame of ours in the bar's art,
+	-- attached to it. Nothing goes into the footer itself (that would put us in its binding handling).
 	local function BuildPiece(container)
 		piece = CreateFrame("Frame", nil, container)
-		-- On the bar's left end: the bar lines up with the bags' right side, and the bags usually sit
-		-- at the screen's right edge, so a section on the right would hang off the screen. The 6
-		-- overlaps the borders, as Blizzard joins its own footer sections.
+		-- The left end, as the bags usually sit at the screen's right edge; the 6 overlaps the borders,
+		-- as Blizzard joins its own sections.
 		piece:SetPoint("TOPRIGHT", container, "TOPLEFT", 6, 0)
 		piece:SetPoint("BOTTOMRIGHT", container, "BOTTOMLEFT", 6, 0)
 		piece.bg = piece:CreateTexture(nil, "BACKGROUND")
@@ -174,11 +165,8 @@ ns.OnLogin(function()
 	end
 	ns.OnRefresh(UpdateHint)
 	UpdateHint()
-	-- These run inside Blizzard's own opening and closing of the bags (a script of a frame in the
-	-- window), and a script handler, unlike a hooksecurefunc hook, can leave its taint on the code
-	-- that runs after it. So they only schedule the work for the next frame, where it runs on its
-	-- own: changing our binding mid-close tainted the gamepad's window handling, and closing the
-	-- bags then got SetPreferredGamepadInteractTarget forbidden.
+	-- These run inside Blizzard's own opening and closing of the bags, where a script can taint what runs
+	-- after it (rebinding mid-close got SetPreferredGamepadInteractTarget forbidden): the work waits a frame.
 	local function Opened()
 		bagsOpen = bags:IsShown()
 		UpdateHint()

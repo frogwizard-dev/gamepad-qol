@@ -1,11 +1,8 @@
--- The button guide: a window listing our controller buttons, shown on first login and whenever an
--- update changes them. Each row lights up when its button is pressed, so players can try them out
--- before closing it. Reopened from the settings window or with /gqol guide. Y opens the settings.
---
--- Taint: our own frame, never handed to Blizzard's window systems (no UIPanel, no UISpecialFrames,
--- no gamepad frame manager). B closes it through a priority override binding of ours, held only
--- while it's open, out of combat and with no gamepad window focused (so B still closes the bags).
-local ADDON, ns = ...
+-- The button guide: our controller buttons, shown on first login and when an update changes them;
+-- each row lights up when its button is pressed, so players can try them. Reopened from the settings
+-- or /gqol guide. Taint: our own frame, never handed to UIPanel, UISpecialFrames or the gamepad frame
+-- manager; its B and Y are ours only while no gamepad window has the controller (B still closes the bags).
+local _, ns = ...
 
 -- Raise when the buttons or what they do change, so players see the guide again.
 local GUIDE_VERSION = 2
@@ -50,60 +47,25 @@ local function HowTo(row)
 	return text:sub(1, 1):upper() .. text:sub(2)
 end
 
-local frame, closeOwner, closeButton, settingsButton
-local rowFrames = {}
-
-local function UIFocused()
-	local manager = GamepadMode and GamepadMode.FrameControlsManager
-	return manager and manager.isUIFocused and true or false
-end
-
--- B closes the guide while nothing else wants it.
-local closeBound = false
-local function UpdateCloseBinding()
-	local want = frame and frame:IsShown() and not UIFocused() and not InCombatLockdown()
-	if want == closeBound or InCombatLockdown() then
-		return
-	end
-	if want then
-		SetOverrideBindingClick(closeOwner, true, "PAD2", closeButton:GetName(), "LeftButton")
-		SetOverrideBindingClick(closeOwner, true, "PAD4", settingsButton:GetName(), "LeftButton")
-	else
-		ClearOverrideBindings(closeOwner)
-	end
-	closeBound = want
-end
+local frame
+local entries = {}   -- [row id] = its tick, title, status and how-to text, and whether it was tried
 
 local function Refresh()
 	for _, row in ipairs(ROWS) do
-		local r = rowFrames[row.id]
+		local entry = entries[row.id]
 		local how = HowTo(row)
-		r.how:SetText(how or "Not set: press Y to pick a button in the settings.")
-		r.how:SetTextColor(how and 1 or 0.6, how and 1 or 0.6, how and 1 or 0.6)
-		r.tick:SetShown(r.tried == true)
-		r.status:SetText(r.tried and "Works!" or "")
+		entry.how:SetText(how or "Not set: press Y to pick a button in the settings.")
+		local shade = how and 1 or 0.6
+		entry.how:SetTextColor(shade, shade, shade)
+		entry.tick:SetShown(entry.tried == true)
+		entry.status:SetText(entry.tried and "Works!" or "")
 	end
 end
 
 local function Build()
-	frame = CreateFrame("Frame", "GamepadQoLGuide", UIParent, "BackdropTemplate")
+	frame = ns.Window("GamepadQoLGuide", 0.94)
 	frame:SetSize(520, 120 + #ROWS * 58)
 	frame:SetPoint("TOP", UIParent, "TOP", 0, -140)
-	frame:SetFrameStrata("DIALOG")
-	frame:SetBackdrop({
-		bgFile = "Interface\\Buttons\\WHITE8X8",
-		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-		edgeSize = 14,
-		insets = { left = 3, right = 3, top = 3, bottom = 3 },
-	})
-	frame:SetBackdropColor(0.04, 0.04, 0.05, 0.94)
-	frame:SetBackdropBorderColor(0.8, 0.65, 0.25)
-	frame:EnableMouse(true)
-	frame:SetMovable(true)
-	frame:RegisterForDrag("LeftButton")
-	frame:SetScript("OnDragStart", frame.StartMoving)
-	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-	frame:Hide()
 
 	local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	title:SetPoint("TOP", 0, -16)
@@ -115,26 +77,26 @@ local function Build()
 
 	local y = -66
 	for _, row in ipairs(ROWS) do
-		local r = {}
-		r.tick = frame:CreateTexture(nil, "OVERLAY")
-		r.tick:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
-		r.tick:SetSize(22, 22)
-		r.tick:SetPoint("TOPLEFT", 18, y - 2)
+		local entry = {}
+		entry.tick = frame:CreateTexture(nil, "OVERLAY")
+		entry.tick:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
+		entry.tick:SetSize(22, 22)
+		entry.tick:SetPoint("TOPLEFT", 18, y - 2)
 
-		r.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-		r.title:SetPoint("TOPLEFT", 48, y)
-		r.title:SetText(row.title)
+		entry.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		entry.title:SetPoint("TOPLEFT", 48, y)
+		entry.title:SetText(row.title)
 
-		r.status = frame:CreateFontString(nil, "OVERLAY", "GameFontGreen")
-		r.status:SetPoint("TOPRIGHT", -20, y)
+		entry.status = frame:CreateFontString(nil, "OVERLAY", "GameFontGreen")
+		entry.status:SetPoint("TOPRIGHT", -20, y)
 
-		r.how = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-		r.how:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -5)
-		r.how:SetPoint("RIGHT", -20, 0)
-		r.how:SetJustifyH("LEFT")
-		r.how:SetWordWrap(true)
+		entry.how = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		entry.how:SetPoint("TOPLEFT", entry.title, "BOTTOMLEFT", 0, -5)
+		entry.how:SetPoint("RIGHT", -20, 0)
+		entry.how:SetJustifyH("LEFT")
+		entry.how:SetWordWrap(true)
 
-		rowFrames[row.id] = r
+		entries[row.id] = entry
 		y = y - 58
 	end
 
@@ -147,14 +109,7 @@ local function Build()
 	hint:SetPoint("BOTTOM", 0, 14)
 	hint:SetText("Y (Triangle): settings  ·  B (Circle) or Close: done")
 
-	local close = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-	close:SetSize(80, 22)
-	close:SetPoint("BOTTOMRIGHT", -12, 10)
-	close:SetText(CLOSE or "Close")
-	close:SetScript("OnClick", function() frame:Hide() end)
-
-	closeOwner = CreateFrame("Frame")
-	closeButton = CreateFrame("Button", "GamepadQoLGuideClose", UIParent)
+	local closeButton = CreateFrame("Button", "GamepadQoLGuideClose", UIParent)
 	closeButton:Hide()
 	closeButton:RegisterForClicks("AnyDown")
 	closeButton:SetScript("OnClick", function() frame:Hide() end)
@@ -163,7 +118,7 @@ local function Build()
 		frame:Hide()
 		C_Timer.After(0, function() ns.ShowOptions() end)
 	end
-	settingsButton = CreateFrame("Button", "GamepadQoLGuideSettings", UIParent)
+	local settingsButton = CreateFrame("Button", "GamepadQoLGuideSettings", UIParent)
 	settingsButton:Hide()
 	settingsButton:RegisterForClicks("AnyDown")
 	settingsButton:SetScript("OnClick", OpenSettings)
@@ -174,27 +129,18 @@ local function Build()
 	settings:SetText("Settings")
 	settings:SetScript("OnClick", OpenSettings)
 
-	local elapsed = 0
-	frame:SetScript("OnUpdate", function(_, dt)
-		elapsed = elapsed + dt
-		if elapsed > 0.1 then
-			elapsed = 0
-			UpdateCloseBinding()
-		end
-	end)
+	local UpdateBindings = ns.Buttons.BindWhileOpen(frame, { PAD2 = closeButton, PAD4 = settingsButton })
 	frame:SetScript("OnShow", function()
-		for _, r in pairs(rowFrames) do
-			r.tried = nil
+		for _, entry in pairs(entries) do
+			entry.tried = nil
 		end
 		Refresh()
-		UpdateCloseBinding()
+		UpdateBindings()
 	end)
 	frame:SetScript("OnHide", function()
-		UpdateCloseBinding()
+		UpdateBindings()
 		ns.db.guideSeen = GUIDE_VERSION
 	end)
-	frame:RegisterEvent("PLAYER_REGEN_DISABLED")
-	frame:SetScript("OnEvent", function() frame:Hide() end)
 end
 
 function ns.ShowGuide()
@@ -209,9 +155,9 @@ end
 
 -- Features call this when their button runs.
 function ns.GuideTried(id)
-	local r = frame and frame:IsShown() and rowFrames[id]
-	if r then
-		r.tried = true
+	local entry = frame and frame:IsShown() and entries[id]
+	if entry then
+		entry.tried = true
 		Refresh()
 	end
 end

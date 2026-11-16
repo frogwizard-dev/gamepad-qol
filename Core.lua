@@ -1,4 +1,5 @@
--- Gamepad QoL: saved settings, the settings page and the refresh hub.
+-- Gamepad QoL: saved settings, the page in Blizzard's AddOns list, the refresh hub, and what the
+-- features share (messages, our windows).
 local ADDON, ns = ...
 
 ns.DEFAULTS = {
@@ -10,6 +11,8 @@ ns.DEFAULTS = {
 	junkQualities = 1,         -- the best quality that counts: 0 greys, 1 whites too, 2 greens too
 	junkWhen = "always",       -- "always", or "nearly" (only while the bags are nearly full)
 	junkStyle = "faded",       -- the look (ns.JUNK_STYLES in Cheapest.lua)
+	autoRepair = true,         -- repair everything when a vendor that can opens (Vendor.lua)
+	autoSellGreys = true,      -- sell grey items to vendors as they open
 	-- Controller buttons (Buttons.lua): a stick click, alone or "HELD+STICK"; "none" for not set.
 	cleanUpButton = "PADLSTICK",                -- L3, only while the bags are open
 	inviteButton = "PADRTRIGGER+PADRSTICK",     -- RT held + R3
@@ -30,21 +33,62 @@ local function ImprovedForeverInstalled()
 	return ok and type(state) == "number" and state > 0
 end
 
-local refreshers = {}
+local refreshers, setups = {}, {}
 
 -- Modules register a function to run when settings change or bags need redrawing.
-function ns.OnRefresh(fn)
-	refreshers[#refreshers + 1] = fn
+function ns.OnRefresh(Refresh)
+	refreshers[#refreshers + 1] = Refresh
 end
 
 function ns.Refresh()
-	for _, fn in ipairs(refreshers) do
-		fn()
+	for _, Refresh in ipairs(refreshers) do
+		Refresh()
 	end
+end
+
+-- Modules add one-time setup to run at login, once Blizzard's bag frames exist.
+function ns.OnLogin(Setup)
+	setups[#setups + 1] = Setup
 end
 
 function ns.IsGamepadUI()
 	return InputUtil and InputUtil.IsGamepadUIEnabled and InputUtil.IsGamepadUIEnabled()
+end
+
+-- A message in the middle of the screen, gold unless a colour is given.
+function ns.Say(text, r, g, b)
+	UIErrorsFrame:AddMessage(text, r or 1, g or 0.82, b or 0)
+end
+
+-- A dark, draggable window of ours with a Close button. It closes as a fight starts, the last moment
+-- its controller bindings can be let go.
+function ns.Window(name, alpha)
+	local frame = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
+	frame:SetFrameStrata("DIALOG")
+	frame:SetBackdrop({
+		bgFile = "Interface\\Buttons\\WHITE8X8",
+		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+		edgeSize = 14,
+		insets = { left = 3, right = 3, top = 3, bottom = 3 },
+	})
+	frame:SetBackdropColor(0.04, 0.04, 0.05, alpha)
+	frame:SetBackdropBorderColor(0.8, 0.65, 0.25)
+	frame:EnableMouse(true)
+	frame:SetMovable(true)
+	frame:RegisterForDrag("LeftButton")
+	frame:SetScript("OnDragStart", frame.StartMoving)
+	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+	frame:Hide()
+
+	local close = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+	close:SetSize(80, 22)
+	close:SetPoint("BOTTOMRIGHT", -12, 10)
+	close:SetText(CLOSE or "Close")
+	close:SetScript("OnClick", function() frame:Hide() end)
+
+	frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+	frame:SetScript("OnEvent", function() frame:Hide() end)
+	return frame
 end
 
 local function InitDB()
@@ -55,9 +99,9 @@ local function InitDB()
 	end
 	GamepadQoLDB = GamepadQoLDB or {}
 	local db = GamepadQoLDB
-	for k, v in pairs(ns.DEFAULTS) do
-		if db[k] == nil or type(db[k]) ~= type(v) then
-			db[k] = v
+	for key, default in pairs(ns.DEFAULTS) do
+		if db[key] == nil or type(db[key]) ~= type(default) then
+			db[key] = default
 		end
 	end
 	-- Buttons saved in a form this version doesn't use (0.1.0 test builds had "CTRL-PADRSTICK").
@@ -69,13 +113,8 @@ local function InitDB()
 	ns.db = db
 end
 
--- A page in Blizzard's AddOns list saying where the settings are, with a button to open them. The
--- settings themselves are in our own window (Options.lua): Blizzard's Settings window calls an
--- addon's code and reads its values while it works, and closing it then upsets Forever's gamepad UI.
--- The page is a plain frame of ours; its button only notes the request, and our window opens once
--- Blizzard's has closed (opening ours while that one has the controller would fight over it).
-local pendingOpen = false
-
+-- A page in Blizzard's AddOns list pointing at our own window (Options.lua says why). Its button only
+-- notes the request: ours opens once Blizzard's has closed, as the two would fight over the controller.
 local function RegisterPage()
 	if not (Settings and Settings.RegisterCanvasLayoutCategory) then
 		return
@@ -109,13 +148,11 @@ local function RegisterPage()
 	watcher:SetScript("OnUpdate", function(self)
 		if not (SettingsPanel and SettingsPanel:IsShown()) then
 			self:Hide()
-			pendingOpen = false
 			note:SetText("")
 			C_Timer.After(0.2, function() ns.ShowOptions() end)
 		end
 	end)
 	button:SetScript("OnClick", function()
-		pendingOpen = true
 		note:SetText("Opens when you close this window.")
 		watcher:Show()
 	end)
@@ -124,11 +161,9 @@ local function RegisterPage()
 end
 
 SLASH_GAMEPADQOL1 = "/gqol"
-SlashCmdList.GAMEPADQOL = function(msg)
-	if (msg or ""):lower():match("guide") then
+SlashCmdList.GAMEPADQOL = function(text)
+	if (text or ""):lower():match("guide") then
 		ns.ShowGuide()
-	elseif (msg or ""):lower():match("cheap") and ns.CheapestReport then
-		ns.CheapestReport()
 	else
 		ns.ShowOptions()
 	end
@@ -137,19 +172,13 @@ end
 local events = CreateFrame("Frame")
 events:RegisterEvent("ADDON_LOADED")
 events:RegisterEvent("PLAYER_LOGIN")
-events:SetScript("OnEvent", function(self, event, arg1)
-	if event == "ADDON_LOADED" and arg1 == ADDON then
+events:SetScript("OnEvent", function(_, event, addonName)
+	if event == "ADDON_LOADED" and addonName == ADDON then
 		InitDB()
 		RegisterPage()
 	elseif event == "PLAYER_LOGIN" then
-		for _, setup in ipairs(ns.setups or {}) do
-			setup()
+		for _, Setup in ipairs(setups) do
+			Setup()
 		end
 	end
 end)
-
--- Modules add one-time setup to run at login, once Blizzard's bag frames exist.
-function ns.OnLogin(fn)
-	ns.setups = ns.setups or {}
-	ns.setups[#ns.setups + 1] = fn
-end

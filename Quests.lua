@@ -1,20 +1,8 @@
--- Track / untrack quests with one button in the quest log (L3 unless changed; Buttons.lua), instead of
--- Y, then the menu, then Track. On a quest (or one of its objectives) it flips that quest; on a zone
--- header it tracks the zone's quests, or untracks them if they're all tracked already. It works in
--- the quest details page too.
---
--- The button is only ours while the Map & Quest Log has the controller with the quest list or a
--- quest's details focused: with the map itself focused, L3 stays the game's map marker, and when
--- the window closes it goes back to auto-run.
---
--- Taint: nothing of Blizzard's is called or written. Which button the cursor is on and which side of
--- the window is focused are only read; tracking is the C_QuestLog API, and the quest log redraws
--- itself from the game's QUEST_WATCH_LIST_CHANGED event.
-local ADDON, ns = ...
-
-local function Say(text, r, g, b)
-	UIErrorsFrame:AddMessage(text, r or 1, g or 0.82, b or 0)
-end
+-- Track / untrack quests with one button in the quest log (L3 unless changed) instead of Y, the menu,
+-- Track. A quest or objective flips that quest; a zone header tracks its quests, or untracks them if
+-- all are; the details page works too. Taint: Blizzard's cursor and focus are only read; tracking is
+-- the C_QuestLog API, and the log redraws itself from QUEST_WATCH_LIST_CHANGED.
+local _, ns = ...
 
 local function IsTracked(questID)
 	return C_QuestLog.GetQuestWatchType(questID) ~= nil
@@ -26,8 +14,8 @@ local function CanUntrack()
 end
 
 local function MaxWatches()
-	local consts = Constants and Constants.QuestWatchConsts
-	return consts and consts.MAX_QUEST_WATCHES or 25
+	local constants = Constants and Constants.QuestWatchConsts
+	return constants and constants.MAX_QUEST_WATCHES or 25
 end
 
 local function Title(questID)
@@ -36,7 +24,7 @@ end
 
 local function Track(questID)
 	if C_QuestLog.GetNumQuestWatches() >= MaxWatches() then
-		Say(("You can only track %d quests."):format(MaxWatches()))
+		ns.Say(("You can only track %d quests."):format(MaxWatches()))
 		return false
 	end
 	C_QuestLog.AddQuestWatch(questID)
@@ -49,9 +37,9 @@ local function ToggleQuest(questID)
 			return
 		end
 		C_QuestLog.RemoveQuestWatch(questID)
-		Say("Untracked: " .. Title(questID), 0.75, 0.75, 0.75)
+		ns.Say("Untracked: " .. Title(questID), 0.75, 0.75, 0.75)
 	elseif Track(questID) then
-		Say("Tracking: " .. Title(questID), 0.3, 1, 0.3)
+		ns.Say("Tracking: " .. Title(questID), 0.3, 1, 0.3)
 	end
 end
 
@@ -90,26 +78,22 @@ local function ToggleHeader(headerLogIndex)
 		for _, questID in ipairs(quests) do
 			C_QuestLog.RemoveQuestWatch(questID)
 		end
-		Say("Untracked all in " .. name, 0.75, 0.75, 0.75)
+		ns.Say("Untracked all in " .. name, 0.75, 0.75, 0.75)
 	else
 		for _, questID in ipairs(quests) do
 			if not IsTracked(questID) and not Track(questID) then
 				break
 			end
 		end
-		Say("Tracking all in " .. name, 0.3, 1, 0.3)
+		ns.Say("Tracking all in " .. name, 0.3, 1, 0.3)
 	end
 end
 
-local function Manager()
-	return GamepadMode and GamepadMode.FrameControlsManager
-end
-
--- Which part of the Map & Quest Log has the controller: "list", "details" or nil (the map, or the
--- window isn't the focused one).
+-- Which part of the Map & Quest Log has the controller: "list", "details" or nil (the map, where L3
+-- stays the game's map marker, or the window isn't the focused one).
 local function FocusedPart()
 	local map = WorldMapFrame
-	local manager = Manager()
+	local manager = GamepadMode and GamepadMode.FrameControlsManager
 	if not (map and map:IsShown() and manager and manager.isUIFocused and manager.focusedFrame == map) then
 		return nil
 	end
@@ -155,7 +139,9 @@ end)
 
 local lastPart
 
-ns.Buttons.Add("trackQuest", "Track / untrack a quest (in the quest log)", button, function()
+-- Ours only while the quest list or a quest's details has the controller; when the window closes the
+-- button goes back to auto-run.
+ns.Buttons.Add("trackQuest", button, function()
 	return FocusedPart() ~= nil
 end)
 
@@ -164,9 +150,8 @@ ns.OnLogin(function()
 	if not map then
 		return
 	end
-	-- A frame of ours inside the map window: it runs only while the window is shown and notices
-	-- when the focus moves between the quest list, the details and the map. Its handlers only read,
-	-- and binding changes wait a frame so they never run inside Blizzard's own opening or closing.
+	-- A frame of ours inside the map window notices the focus moving between list, details and map. It
+	-- only reads; binding changes wait a frame so they never run inside Blizzard's opening or closing.
 	local watcher = CreateFrame("Frame", nil, map)
 	watcher:SetSize(1, 1)
 	watcher:SetPoint("TOPLEFT")
