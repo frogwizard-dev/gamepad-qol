@@ -113,8 +113,10 @@ local function InitDB()
 	ns.db = db
 end
 
--- A page in Blizzard's AddOns list pointing at our own window (Options.lua says why). Its button only
--- notes the request: ours opens once Blizzard's has closed, as the two would fight over the controller.
+-- A page in Blizzard's AddOns list pointing at our own window (Options.lua says why). Showing the page is
+-- the request (the controller can't reach a button on it: Forever only steers into Blizzard's own settings
+-- lists); ours opens once Blizzard's has closed, as the two would fight over the controller. Moving on to
+-- another page drops the request. The button does the same for the mouse.
 local function RegisterPage()
 	if not (Settings and Settings.RegisterCanvasLayoutCategory) then
 		return
@@ -130,8 +132,8 @@ local function RegisterPage()
 	text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -12)
 	text:SetWidth(560)
 	text:SetJustifyH("LEFT")
-	text:SetText("Gamepad QoL's settings have their own window, made for the controller. Press the button "
-		.. "below and it opens as soon as you close this window. You can also open it with /gqol, "
+	text:SetText("Gamepad QoL's settings have their own window, made for the controller. Close this window "
+		.. "(B) with this page showing and it opens straight away. You can also open it with /gqol, "
 		.. "or with Y in the button guide (/gqol guide).")
 
 	local button = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
@@ -146,16 +148,24 @@ local function RegisterPage()
 	local watcher = CreateFrame("Frame")
 	watcher:Hide()
 	watcher:SetScript("OnUpdate", function(self)
-		if not (SettingsPanel and SettingsPanel:IsShown()) then
-			self:Hide()
-			note:SetText("")
-			C_Timer.After(0.2, function() ns.ShowOptions() end)
+		if SettingsPanel and SettingsPanel:IsShown() then
+			if not page:IsVisible() then
+				self:Hide()
+				note:SetText("")
+			end
+			return
 		end
+		self:Hide()
+		note:SetText("")
+		C_Timer.After(0.2, function() ns.ShowOptions() end)
 	end)
-	button:SetScript("OnClick", function()
+	local function Request()
 		note:SetText("Opens when you close this window.")
 		watcher:Show()
-	end)
+	end
+	button:SetScript("OnClick", Request)
+	-- Shown from inside Blizzard's window: the work waits a frame, so none of it runs as part of Blizzard's code.
+	page:SetScript("OnShow", function() C_Timer.After(0, Request) end)
 
 	Settings.RegisterAddOnCategory(Settings.RegisterCanvasLayoutCategory(page, page.name))
 end

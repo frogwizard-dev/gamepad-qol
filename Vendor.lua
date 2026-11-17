@@ -8,12 +8,14 @@ local POOR = (Enum.ItemQuality and Enum.ItemQuality.Poor) or 0
 -- buyable again.
 local BUYBACK = 12
 
--- "1g 2s 30c", with the game's coin icons.
+-- "1g 2s 30c", with the game's coin icons (Forever has the C_CurrencyInfo one, not the old global).
 local function Money(copper)
-	if GetCoinTextureString then
-		return GetCoinTextureString(copper)
+	local Format = (C_CurrencyInfo and C_CurrencyInfo.GetCoinTextureString) or GetCoinTextureString
+	if Format then
+		return Format(copper)
 	end
-	return string.format("%dc", copper)
+	local gold, silver = math.floor(copper / 10000), math.floor(copper / 100) % 100
+	return string.format("%dg %ds %dc", gold, silver, copper % 100)
 end
 
 local function Repair()
