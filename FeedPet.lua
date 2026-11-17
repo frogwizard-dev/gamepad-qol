@@ -24,9 +24,14 @@ end
 
 local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 
+-- A food in your bags whose details hadn't loaded at the last pick: only then does item info arriving pick again (an
+-- auction house scan sends thousands of those).
+local waitingInfo = false
+
 -- bag, slot, item name of the food to use; nil if there's none. Food at most 10 levels below the pet
 -- does the most for its happiness: the lowest of those (better food lasts), else the highest it eats.
 local function PickFood()
+	waitingInfo = false
 	if not (C_PetInfo and C_PetInfo.CanPetEatItem) or not UnitExists("pet") then
 		return nil
 	end
@@ -35,8 +40,13 @@ local function PickFood()
 	for bag = 0, NumBags() do
 		for slot = 1, C_Container.GetContainerNumSlots(bag) do
 			local info = C_Container.GetContainerItemInfo(bag, slot)
-			if info and info.itemID and C_PetInfo.CanPetEatItem(info.itemID) then
+			-- Not loaded yet, so whether the pet eats it may not be known either: asked for, and picked again when it comes.
+			if info and info.itemID and C_Item.IsItemDataCachedByID and not C_Item.IsItemDataCachedByID(info.itemID) then
+				waitingInfo = true
+				C_Item.RequestLoadItemDataByID(info.itemID)
+			elseif info and info.itemID and C_PetInfo.CanPetEatItem(info.itemID) then
 				local name, _, _, itemLevel = GetItemInfo(info.itemID)
+				if not name then waitingInfo = true end
 				if name then
 					local food = { bag = bag, slot = slot, name = name, level = itemLevel or 0, count = info.stackCount or 1 }
 					if food.level >= petLevel - 10 then
@@ -106,8 +116,8 @@ end)
 
 -- In combat the macro waits; PLAYER_REGEN_ENABLED catches it up.
 local events = CreateFrame("Frame")
-events:SetScript("OnEvent", function(_, event, unit)
-	if (event == "UNIT_PET" or event == "UNIT_LEVEL") and unit ~= "player" and unit ~= "pet" then
+events:SetScript("OnEvent", function(_, event)
+	if event == "GET_ITEM_INFO_RECEIVED" and not waitingInfo then
 		return
 	end
 	if event == "UNIT_PET" or event == "SPELLS_CHANGED" then
@@ -121,8 +131,9 @@ ns.OnLogin(function()
 		return
 	end
 	events:RegisterEvent("BAG_UPDATE_DELAYED")
-	events:RegisterEvent("UNIT_PET")
-	events:RegisterEvent("UNIT_LEVEL")
+	-- Your own pet and its level only, not every unit's.
+	events:RegisterUnitEvent("UNIT_PET", "player")
+	events:RegisterUnitEvent("UNIT_LEVEL", "player", "pet")
 	events:RegisterEvent("SPELLS_CHANGED")
 	events:RegisterEvent("PLAYER_REGEN_ENABLED")
 	events:RegisterEvent("GET_ITEM_INFO_RECEIVED")

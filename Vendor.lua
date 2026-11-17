@@ -33,16 +33,20 @@ local function Repair()
 	return "repaired for " .. Money(cost)
 end
 
--- Your grey items that sell for something, as { bag, slot, value } (value: the whole stack).
+-- Your grey items that sell for something, as { bag, slot, value, id } (value: the whole stack). An item the client
+-- hasn't loaded yet has no quality in its bag info: its details are asked for (it's sold next time).
 local function Greys()
 	local found = {}
 	for bag = 0, NUM_BAG_SLOTS or 4 do
 		for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
 			local info = C_Container.GetContainerItemInfo(bag, slot)
-			if info and info.quality == POOR and not info.isLocked and not info.hasNoValue then
-				local price = select(11, C_Item.GetItemInfo(info.hyperlink or info.itemID))
-				if price and price > 0 then
-					found[#found + 1] = { bag = bag, slot = slot, value = price * (info.stackCount or 1) }
+			if info and not info.isLocked and not info.hasNoValue then
+				local _, _, quality, _, _, _, _, _, _, _, price = C_Item.GetItemInfo(info.hyperlink or info.itemID)
+				quality = info.quality or quality
+				if quality == nil and info.itemID and C_Item.RequestLoadItemDataByID then
+					C_Item.RequestLoadItemDataByID(info.itemID)
+				elseif quality == POOR and price and price > 0 then
+					found[#found + 1] = { bag = bag, slot = slot, value = price * (info.stackCount or 1), id = info.itemID }
 				end
 			end
 		end
@@ -50,27 +54,68 @@ local function Greys()
 	return found
 end
 
-local function SellGreys()
+-- Done(text) once the sales have gone through, or Done(nil). The server drops sales sent too fast, so they go a few
+-- at a time, and what's said is what really left your bags (looked at a moment after).
+local STEP = 6
+local function SellGreys(Done)
 	if not ns.db.autoSellGreys then
-		return nil
+		return Done(nil)
 	end
 	local greys = Greys()
 	if #greys == 0 then
-		return nil
+		return Done(nil)
 	end
 	-- Most valuable first, so if there are more than the buyback list holds, the best go.
 	table.sort(greys, function(first, second) return first.value > second.value end)
-	local count, total = 0, 0
-	for i = 1, math.min(#greys, BUYBACK) do
-		local item = greys[i]
-		C_Container.UseContainerItem(item.bag, item.slot)
-		count, total = count + 1, total + item.value
+	local list = {}
+	for i = 1, math.min(#greys, BUYBACK) do list[i] = greys[i] end
+	local index = 1
+	-- What was sent (the first index - 1) and has left your bags; one still locked is on its way, looked at again
+	-- (twice at most) before it's counted as not sold.
+	local tries = 0
+	local function Count()
+		local count, total, pending = 0, 0, false
+		for i = 1, index - 1 do
+			local item = list[i]
+			local info = C_Container.GetContainerItemInfo(item.bag, item.slot)
+			if not (info and info.itemID == item.id) then
+				count, total = count + 1, total + item.value
+			elseif info.isLocked then
+				pending = true
+			end
+		end
+		tries = tries + 1
+		if pending and tries < 3 then
+			C_Timer.After(1, Count)
+			return
+		end
+		if count == 0 then
+			return Done(nil)
+		end
+		local text = string.format("sold %d grey item%s for %s", count, count == 1 and "" or "s", Money(total))
+		if #greys - count > 0 then
+			text = text .. string.format(" (%d more next time)", #greys - count)
+		end
+		Done(text)
 	end
-	local text = string.format("sold %d grey item%s for %s", count, count == 1 and "" or "s", Money(total))
-	if #greys > BUYBACK then
-		text = text .. string.format(" (%d more next time)", #greys - BUYBACK)
+	local function Step()
+		-- The vendor closed or a fight began part way: what went is still said.
+		if InCombatLockdown() or not (MerchantFrame and MerchantFrame:IsShown()) then
+			C_Timer.After(1, Count)
+			return
+		end
+		for _ = 1, STEP do
+			local item = list[index]
+			if not item then
+				C_Timer.After(1, Count)
+				return
+			end
+			C_Container.UseContainerItem(item.bag, item.slot)
+			index = index + 1
+		end
+		C_Timer.After(0.25, Step)
 	end
-	return text
+	Step()
 end
 
 local events = CreateFrame("Frame")
@@ -84,11 +129,13 @@ events:SetScript("OnEvent", function()
 		local done = {}
 		local ok, repaired = pcall(Repair)
 		if ok and repaired then done[#done + 1] = repaired end
-		local okSell, sold = pcall(SellGreys)
-		if okSell and sold then done[#done + 1] = sold end
-		if #done > 0 then
-			local text = table.concat(done, ", ")
-			ns.Say(text:sub(1, 1):upper() .. text:sub(2))
+		local function Said(sold)
+			if sold then done[#done + 1] = sold end
+			if #done > 0 then
+				local text = table.concat(done, ", ")
+				ns.Say(text:sub(1, 1):upper() .. text:sub(2))
+			end
 		end
+		if not pcall(SellGreys, Said) then Said(nil) end
 	end)
 end)

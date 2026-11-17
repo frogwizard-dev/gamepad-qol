@@ -1,5 +1,10 @@
 # Gamepad QoL
 
+## 0.5.1
+
+- Selling greys at a vendor: sales go a few at a time (the server drops ones sent too fast) and what's said is what really sold; items the client hadn't loaded yet are picked up next time. Closing the vendor or starting a fight part way through still says what sold, and a sale still on its way is looked at again before it counts.
+- Feed Pet listens only to your own pet and level, and to item details only while a food's are loading; a food the client hadn't loaded yet is asked for and picked when it comes.
+
 ## 0.5.0
 
 - At a vendor: your gear is repaired and your grey items are sold as the window opens, so there's no steering to the vendor's buttons with the controller. A message says what it cost and what you got ("Repaired for 1g 2s, sold 6 grey items for 43s"). Greys only, and at most 12 at a time, so each can still be bought back; whites and greens marked as junk are left to you. Both can be turned off in the settings, under "At a vendor". Amounts show in gold, silver and copper with the coin icons.
