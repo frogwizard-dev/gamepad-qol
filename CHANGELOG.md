@@ -1,5 +1,10 @@
 # Gamepad QoL
 
+## 0.6.0
+
+- Health on the party portraits: in a party, hold the friendly targeting button and each portrait shows a green health bar across its bottom and the health % above it: your party on the D-pad, plus you, your pet and your target's target. Party members out of range are dimmed. When you're healing, whoever is low is the button to press, without having to know everyone's face. It keeps working in combat. Turn it off in the settings, under "Controller".
+- The settings window stays on screen.
+
 ## 0.5.1
 
 - Selling greys at a vendor: sales go a few at a time (the server drops ones sent too fast) and what's said is what really sold; items the client hadn't loaded yet are picked up next time. Closing the vendor or starting a fight part way through still says what sold, and a sale still on its way is looked at again before it counts.

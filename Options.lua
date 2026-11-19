@@ -39,7 +39,9 @@ local ROWS = {
 	{ key = "autoSellGreys", label = "Sell grey items", bool = true,
 		tip = "As a vendor opens, sells your grey (poor quality) items, up to 12 at a time so every one can still be bought back. Only greys: whites and greens marked as junk are left for you to decide." },
 
-	{ header = "Controller buttons" },
+	{ header = "Controller" },
+	{ key = "partyHealth", label = "Health on party portraits", bool = true,
+		tip = "In a party, hold the friendly targeting button and each portrait (your party on the D-pad, you, your pet, your target's target) shows a green health bar and its health %. Party members out of range are dimmed. Whoever is low is the button to press." },
 	{ key = "cleanUpButton", label = "Clean Up Bags (bags open)", choices = function() return ns.Buttons.Choices() end,
 		tip = "Cleans up your bags while they're open; the button does its usual job again once they close." },
 	{ key = "inviteButton", label = "Quick invite", choices = function() return ns.Buttons.Choices() end,
@@ -236,6 +238,7 @@ local function Build()
 
 	frame:SetSize(WIDTH, -y + 44 + 60)
 	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
+	frame:SetClampedToScreen(true)
 
 	local navButtons = {}
 	for key, Press in pairs(NAV) do

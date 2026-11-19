@@ -13,6 +13,7 @@ ns.DEFAULTS = {
 	junkStyle = "faded",       -- the look (ns.JUNK_STYLES in Cheapest.lua)
 	autoRepair = true,         -- repair everything when a vendor that can opens (Vendor.lua)
 	autoSellGreys = true,      -- sell grey items to vendors as they open
+	partyHealth = true,        -- health bar and % on the friendly targeting portraits (PartyHealth.lua)
 	-- Controller buttons (Buttons.lua): a stick click, alone or "HELD+STICK"; "none" for not set.
 	cleanUpButton = "PADLSTICK",                -- L3, only while the bags are open
 	inviteButton = "PADRTRIGGER+PADRSTICK",     -- RT held + R3
